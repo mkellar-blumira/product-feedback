@@ -11,9 +11,9 @@ Community node for the Blumira Public API in n8n.
 
 ## Installation
 
-Install the community node package in the same environment as n8n.
+Follow the [community node installation guide](https://docs.n8n.io/integrations/community-nodes/installation/).
 
-1. Install via npm.
+1. Install via npm in the same environment as n8n.
 
    npm install n8n-nodes-blumira
 
@@ -51,6 +51,16 @@ Create a `Blumira API` credential with the following field:
   - Get Details
 - Health
   - Get
+
+## Compatibility
+
+- Uses n8n nodes API version 1.
+- Requires the same Node.js version supported by your n8n instance.
+
+## Resources
+
+- [Blumira Public API](https://api.blumira.com/public-api/v1/ui/)
+- [n8n community nodes documentation](https://docs.n8n.io/integrations/community-nodes/)
 
 ## Development
 
