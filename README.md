@@ -8,7 +8,6 @@ Community node for the Blumira Public API in n8n.
 - MSP account listing and details
 - MSP account findings, comments, agent devices, and agent keys
 - Organization findings, comments, details, agent devices, and agent keys
-- Pax8 provision requests
 
 ## Installation
 
@@ -22,10 +21,9 @@ Install the community node package in the same environment as n8n.
 
 ## Credentials
 
-Create a `Blumira API` credential with the following fields:
+Create a `Blumira API` credential with the following field:
 
 - `Access Token`: JWT access token for Bearer authentication.
-- `Pax8 API Token`: optional token for Pax8 provision endpoints.
 
 ## Resources and operations
 
@@ -51,8 +49,6 @@ Create a `Blumira API` credential with the following fields:
   - Get Many
   - Get Comments
   - Get Details
-- Pax8 Provision
-  - Create
 - Health
   - Get
 

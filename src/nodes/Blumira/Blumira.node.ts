@@ -138,51 +138,15 @@ async function blumiraApiRequestAllItems(
 	return returnData;
 }
 
-function parseJsonParameter(
-	this: IExecuteFunctions,
-	value: IDataObject | string,
-	fieldName: string,
-	itemIndex: number,
-): IDataObject {
-	if (typeof value === 'string') {
-		if (!value) {
-			return {};
-		}
-
-		try {
-			return JSON.parse(value) as IDataObject;
-		} catch (error) {
-			throw new NodeOperationError(this.getNode(), `Invalid JSON for ${fieldName}.`, {
-				itemIndex,
-			});
-		}
-	}
-
-	return value;
-}
-
-async function assertCredentials(
-	this: IExecuteFunctions,
-	options: { requiresAccessToken?: boolean; requiresPax8Token?: boolean },
-	itemIndex: number,
-) {
+async function assertAccessToken(this: IExecuteFunctions, itemIndex: number) {
 	const credentials = await this.getCredentials('blumiraApi');
 
 	const accessToken = `${credentials.accessToken ?? ''}`.trim();
-	const pax8ApiToken = `${credentials.pax8ApiToken ?? ''}`.trim();
 
-	if (options.requiresAccessToken && !accessToken) {
+	if (!accessToken) {
 		throw new NodeOperationError(
 			this.getNode(),
 			'Access token is required for this operation.',
-			{ itemIndex },
-		);
-	}
-
-	if (options.requiresPax8Token && !pax8ApiToken) {
-		throw new NodeOperationError(
-			this.getNode(),
-			'Pax8 API token is required for this operation.',
 			{ itemIndex },
 		);
 	}
@@ -232,10 +196,6 @@ export class Blumira implements INodeType {
 					{
 						name: 'Health',
 						value: 'health',
-					},
-					{
-						name: 'Pax8 Provision',
-						value: 'pax8Provision',
 					},
 				],
 				default: 'finding',
@@ -418,25 +378,6 @@ export class Blumira implements INodeType {
 					},
 				],
 				default: 'getManyFindings',
-			},
-			{
-				displayName: 'Operation',
-				name: 'operation',
-				type: 'options',
-				displayOptions: {
-					show: {
-						resource: ['pax8Provision'],
-					},
-				},
-				options: [
-					{
-						name: 'Create',
-						value: 'create',
-						description: 'Submit a Pax8 provision request',
-						action: 'Create a Pax8 provision request',
-					},
-				],
-				default: 'create',
 			},
 			{
 				displayName: 'Account ID',
@@ -719,61 +660,6 @@ export class Blumira implements INodeType {
 					},
 				],
 			},
-			{
-				displayName: 'Provision Request',
-				name: 'provisionRequest',
-				type: 'json',
-				default: '{}',
-				required: true,
-				displayOptions: {
-					show: {
-						resource: ['pax8Provision'],
-						operation: ['create'],
-					},
-				},
-				description: 'Provision request payload.',
-			},
-			{
-				displayName: 'Provision Detail',
-				name: 'provisionDetail',
-				type: 'json',
-				default: '{}',
-				required: true,
-				displayOptions: {
-					show: {
-						resource: ['pax8Provision'],
-						operation: ['create'],
-					},
-				},
-				description: 'Provision detail payload.',
-			},
-			{
-				displayName: 'Provision Attempt',
-				name: 'provisionAttempt',
-				type: 'json',
-				default: '{}',
-				required: true,
-				displayOptions: {
-					show: {
-						resource: ['pax8Provision'],
-						operation: ['create'],
-					},
-				},
-				description: 'Provision attempt payload.',
-			},
-			{
-				displayName: 'Simulation',
-				name: 'isSimulation',
-				type: 'boolean',
-				default: false,
-				displayOptions: {
-					show: {
-						resource: ['pax8Provision'],
-						operation: ['create'],
-					},
-				},
-				description: 'Whether this is a simulation request.',
-			},
 		],
 	};
 
@@ -786,55 +672,13 @@ export class Blumira implements INodeType {
 			const operation = this.getNodeParameter('operation', i) as string;
 
 			if (resource === 'health') {
-				await assertCredentials.call(this, { requiresAccessToken: true }, i);
+				await assertAccessToken.call(this, i);
 				const responseData = await blumiraApiRequest.call(this, 'GET', '/health');
 				returnData.push({ json: responseData });
 				continue;
 			}
 
-			if (resource === 'pax8Provision') {
-				await assertCredentials.call(this, { requiresPax8Token: true }, i);
-
-				const provisionRequest = parseJsonParameter.call(
-					this,
-					this.getNodeParameter('provisionRequest', i),
-					'Provision Request',
-					i,
-				);
-				const provisionDetail = parseJsonParameter.call(
-					this,
-					this.getNodeParameter('provisionDetail', i),
-					'Provision Detail',
-					i,
-				);
-				const provisionAttempt = parseJsonParameter.call(
-					this,
-					this.getNodeParameter('provisionAttempt', i),
-					'Provision Attempt',
-					i,
-				);
-				const isSimulation = this.getNodeParameter('isSimulation', i) as boolean;
-
-				const body: IDataObject = {
-					provisionRequest,
-					provisionDetail,
-					provisionAttempt,
-					isSimulation,
-				};
-
-				const responseData = await blumiraApiRequest.call(
-					this,
-					'POST',
-					'/pax8/provision',
-					{},
-					body,
-				);
-
-				returnData.push({ json: responseData });
-				continue;
-			}
-
-			await assertCredentials.call(this, { requiresAccessToken: true }, i);
+			await assertAccessToken.call(this, i);
 
 			if (resource === 'account') {
 				if (operation === 'getMany') {

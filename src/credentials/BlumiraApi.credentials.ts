@@ -21,16 +21,6 @@ export class BlumiraApi implements ICredentialType {
 			default: '',
 			description: 'JWT access token without the Bearer prefix.',
 		},
-		{
-			displayName: 'Pax8 API Token',
-			name: 'pax8ApiToken',
-			type: 'string',
-			typeOptions: {
-				password: true,
-			},
-			default: '',
-			description: 'Optional token for Pax8 provision requests.',
-		},
 	];
 
 	authenticate: IAuthenticateGeneric = {
@@ -39,8 +29,6 @@ export class BlumiraApi implements ICredentialType {
 			headers: {
 				Authorization:
 					'={{$credentials.accessToken ? "Bearer " + $credentials.accessToken : undefined}}',
-				pax8ApiTokenV1:
-					'={{$credentials.pax8ApiToken ? $credentials.pax8ApiToken : undefined}}',
 			},
 		},
 	};
