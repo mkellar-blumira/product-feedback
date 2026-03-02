@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useApiKeys } from "./api-key-provider";
 import {
   DEMO_DATA_SOURCES,
@@ -35,6 +35,7 @@ import {
   AlertTriangle,
   Settings,
   Loader2,
+  Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -70,6 +71,7 @@ export function SourcePanel({
   >("sources");
   const [detail, setDetail] = useState<DetailView>(null);
   const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const [feedback, setFeedback] = useState<FeedbackItem[]>([]);
   const [features, setFeatures] = useState<ProductboardFeature[]>([]);
@@ -112,7 +114,7 @@ export function SourcePanel({
           source: "productboard",
           connected: pbRes.connected,
           lastSync: pbRes.connected ? "just now" : undefined,
-          itemCount: newFeatures.length,
+          itemCount: newFeatures.length + newFeedback.length,
           icon: "clipboard-list",
         });
       }
@@ -151,6 +153,42 @@ export function SourcePanel({
     loadData();
   }, [loadData]);
 
+  const sq = searchQuery.toLowerCase().trim();
+
+  const filteredFeedback = useMemo(() => {
+    if (!sq) return feedback;
+    return feedback.filter(
+      (fb) =>
+        fb.title.toLowerCase().includes(sq) ||
+        fb.content.toLowerCase().includes(sq) ||
+        fb.customer.toLowerCase().includes(sq) ||
+        (fb.company || "").toLowerCase().includes(sq) ||
+        fb.themes.some((t) => t.toLowerCase().includes(sq))
+    );
+  }, [feedback, sq]);
+
+  const filteredFeatures = useMemo(() => {
+    if (!sq) return features;
+    return features.filter(
+      (f) =>
+        f.name.toLowerCase().includes(sq) ||
+        f.description.toLowerCase().includes(sq) ||
+        f.status.toLowerCase().includes(sq) ||
+        f.themes.some((t) => t.toLowerCase().includes(sq))
+    );
+  }, [features, sq]);
+
+  const filteredCalls = useMemo(() => {
+    if (!sq) return calls;
+    return calls.filter(
+      (c) =>
+        c.title.toLowerCase().includes(sq) ||
+        c.summary.toLowerCase().includes(sq) ||
+        c.participants.some((p) => p.toLowerCase().includes(sq)) ||
+        c.themes.some((t) => t.toLowerCase().includes(sq))
+    );
+  }, [calls, sq]);
+
   const totalItems = feedback.length + features.length + calls.length;
 
   const sentimentIcon = (s: string) => {
@@ -160,6 +198,8 @@ export function SourcePanel({
       return <ThumbsDown className="w-3 h-3 text-red-500" />;
     return <Minus className="w-3 h-3 text-muted-foreground" />;
   };
+
+  const showSearch = activeTab !== "sources";
 
   return (
     <div className={cn("flex flex-col h-full", className)}>
@@ -176,7 +216,7 @@ export function SourcePanel({
               </span>
             )}
             <span className="text-[10px] bg-green-500/10 text-green-600 px-2 py-0.5 rounded-full font-medium">
-              {totalItems} items{!dataIsDemo ? " synced" : ""}
+              {totalItems} items
             </span>
           </div>
         </div>
@@ -191,7 +231,7 @@ export function SourcePanel({
           ).map((tab) => (
             <button
               key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
+              onClick={() => { setActiveTab(tab.key); setSearchQuery(""); }}
               className={cn(
                 "px-2.5 py-1 rounded-lg text-[10px] font-medium transition-colors",
                 activeTab === tab.key
@@ -204,6 +244,36 @@ export function SourcePanel({
           ))}
         </div>
       </div>
+
+      {showSearch && (
+        <div className="px-3 py-2 border-b border-border">
+          <div className="flex items-center gap-2 bg-muted rounded-lg px-2.5 py-1.5">
+            <Search className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={`Search ${activeTab}...`}
+              className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground/60"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+          {sq && (
+            <p className="text-[10px] text-muted-foreground mt-1 px-1">
+              {activeTab === "feedback" && `${filteredFeedback.length} of ${feedback.length} results`}
+              {activeTab === "features" && `${filteredFeatures.length} of ${features.length} results`}
+              {activeTab === "calls" && `${filteredCalls.length} of ${calls.length} results`}
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto scrollbar-thin">
         {loading && (
@@ -283,39 +353,21 @@ export function SourcePanel({
                 </p>
               </div>
               <div className="flex items-center justify-center gap-2 text-[9px]">
-                <span
-                  className={cn(
-                    "px-1.5 py-0.5 rounded",
-                    status.geminiKey.configured
-                      ? "bg-green-500/10 text-green-600"
-                      : "bg-muted text-muted-foreground"
-                  )}
-                >
-                  Gemini{" "}
-                  {status.geminiKey.configured ? "✓" : "—"}
-                </span>
-                <span
-                  className={cn(
-                    "px-1.5 py-0.5 rounded",
-                    status.productboardKey.configured
-                      ? "bg-green-500/10 text-green-600"
-                      : "bg-muted text-muted-foreground"
-                  )}
-                >
-                  Productboard{" "}
-                  {status.productboardKey.configured ? "✓" : "—"}
-                </span>
-                <span
-                  className={cn(
-                    "px-1.5 py-0.5 rounded",
-                    status.attentionKey.configured
-                      ? "bg-green-500/10 text-green-600"
-                      : "bg-muted text-muted-foreground"
-                  )}
-                >
-                  Attention{" "}
-                  {status.attentionKey.configured ? "✓" : "—"}
-                </span>
+                {[
+                  { label: "Gemini", configured: status.geminiKey.configured },
+                  { label: "Productboard", configured: status.productboardKey.configured },
+                  { label: "Attention", configured: status.attentionKey.configured },
+                ].map((s) => (
+                  <span
+                    key={s.label}
+                    className={cn(
+                      "px-1.5 py-0.5 rounded",
+                      s.configured ? "bg-green-500/10 text-green-600" : "bg-muted text-muted-foreground"
+                    )}
+                  >
+                    {s.label} {s.configured ? "\u2713" : "\u2014"}
+                  </span>
+                ))}
               </div>
             </div>
           </div>
@@ -323,16 +375,18 @@ export function SourcePanel({
 
         {!loading && activeTab === "feedback" && (
           <div>
-            {feedback.length === 0 ? (
+            {filteredFeedback.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <AlertTriangle className="w-5 h-5 mx-auto mb-2 opacity-40" />
-                <p className="text-xs mb-1">No feedback data</p>
-                <p className="text-[10px]">
-                  Connect API keys or enable demo data in Settings
-                </p>
+                <p className="text-xs mb-1">{sq ? "No matching feedback" : "No feedback data"}</p>
+                {!sq && (
+                  <p className="text-[10px]">
+                    Connect API keys or enable demo data in Settings
+                  </p>
+                )}
               </div>
             ) : (
-              feedback.map((fb) => (
+              filteredFeedback.map((fb) => (
                 <button
                   key={fb.id}
                   onClick={() => setDetail({ type: "feedback", data: fb })}
@@ -346,18 +400,8 @@ export function SourcePanel({
                       </h4>
                       <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-muted-foreground">
                         <span className="capitalize">{fb.source}</span>
-                        <span>·</span>
-                        <span>{fb.customer}</span>
-                        <span>·</span>
-                        <span
-                          className={cn(
-                            "font-medium",
-                            fb.priority === "critical" && "text-red-500",
-                            fb.priority === "high" && "text-amber-500"
-                          )}
-                        >
-                          {fb.priority}
-                        </span>
+                        {fb.customer && <><span>·</span><span>{fb.customer}</span></>}
+                        {fb.company && <><span>·</span><span>{fb.company}</span></>}
                       </div>
                     </div>
                     <ChevronRight className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity mt-0.5" />
@@ -370,16 +414,18 @@ export function SourcePanel({
 
         {!loading && activeTab === "features" && (
           <div>
-            {features.length === 0 ? (
+            {filteredFeatures.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <AlertTriangle className="w-5 h-5 mx-auto mb-2 opacity-40" />
-                <p className="text-xs mb-1">No feature data</p>
-                <p className="text-[10px]">
-                  Connect Productboard or enable demo data in Settings
-                </p>
+                <p className="text-xs mb-1">{sq ? "No matching features" : "No feature data"}</p>
+                {!sq && (
+                  <p className="text-[10px]">
+                    Connect Productboard or enable demo data in Settings
+                  </p>
+                )}
               </div>
             ) : (
-              features.map((feat) => (
+              filteredFeatures.map((feat) => (
                 <button
                   key={feat.id}
                   onClick={() => setDetail({ type: "feature", data: feat })}
@@ -403,10 +449,8 @@ export function SourcePanel({
                         <span className="capitalize">
                           {feat.status.replace("_", " ")}
                         </span>
-                        <span>·</span>
-                        <span>{feat.votes} votes</span>
-                        <span>·</span>
-                        <span>{feat.customerRequests} requests</span>
+                        {feat.votes > 0 && <><span>·</span><span>{feat.votes} votes</span></>}
+                        {feat.customerRequests > 0 && <><span>·</span><span>{feat.customerRequests} requests</span></>}
                       </div>
                     </div>
                   </div>
@@ -418,16 +462,18 @@ export function SourcePanel({
 
         {!loading && activeTab === "calls" && (
           <div>
-            {calls.length === 0 ? (
+            {filteredCalls.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <AlertTriangle className="w-5 h-5 mx-auto mb-2 opacity-40" />
-                <p className="text-xs mb-1">No call data</p>
-                <p className="text-[10px]">
-                  Connect Attention or enable demo data in Settings
-                </p>
+                <p className="text-xs mb-1">{sq ? "No matching calls" : "No call data"}</p>
+                {!sq && (
+                  <p className="text-[10px]">
+                    Connect Attention or enable demo data in Settings
+                  </p>
+                )}
               </div>
             ) : (
-              calls.map((call) => (
+              filteredCalls.map((call) => (
                 <button
                   key={call.id}
                   onClick={() => setDetail({ type: "call", data: call })}
@@ -474,57 +520,45 @@ export function SourcePanel({
             {detail.type === "feedback" && (
               <>
                 <h3 className="text-sm font-semibold">{detail.data.title}</h3>
-                <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                <div className="flex items-center gap-2 text-[10px] text-muted-foreground flex-wrap">
                   <span className="capitalize">{detail.data.source}</span>
-                  <span>·</span>
-                  <span>{detail.data.customer}</span>
-                  {detail.data.company && (
-                    <>
-                      <span>·</span>
-                      <span>{detail.data.company}</span>
-                    </>
-                  )}
+                  {detail.data.customer && <><span>·</span><span>{detail.data.customer}</span></>}
+                  {detail.data.company && <><span>·</span><span>{detail.data.company}</span></>}
                 </div>
                 <p className="text-xs text-muted-foreground leading-relaxed">
                   {detail.data.content}
                 </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {detail.data.themes.map((t) => (
-                    <span
-                      key={t}
-                      className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-medium"
-                    >
-                      {t}
-                    </span>
-                  ))}
-                </div>
+                {detail.data.themes.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {detail.data.themes.map((t) => (
+                      <span key={t} className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-medium">
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </>
             )}
             {detail.type === "feature" && (
               <>
                 <h3 className="text-sm font-semibold">{detail.data.name}</h3>
                 <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                  <span className="capitalize">
-                    {detail.data.status.replace("_", " ")}
-                  </span>
-                  <span>·</span>
-                  <span>{detail.data.votes} votes</span>
-                  <span>·</span>
-                  <span>{detail.data.customerRequests} requests</span>
+                  <span className="capitalize">{detail.data.status.replace("_", " ")}</span>
+                  {detail.data.votes > 0 && <><span>·</span><span>{detail.data.votes} votes</span></>}
+                  {detail.data.customerRequests > 0 && <><span>·</span><span>{detail.data.customerRequests} requests</span></>}
                 </div>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  {detail.data.description}
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {detail.data.themes.map((t) => (
-                    <span
-                      key={t}
-                      className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-medium"
-                    >
-                      {t}
-                    </span>
-                  ))}
-                </div>
+                {detail.data.description && (
+                  <p className="text-xs text-muted-foreground leading-relaxed">{detail.data.description}</p>
+                )}
+                {detail.data.themes.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {detail.data.themes.map((t) => (
+                      <span key={t} className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-medium">
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </>
             )}
             {detail.type === "call" && (
@@ -535,42 +569,31 @@ export function SourcePanel({
                   <span>·</span>
                   <span>{detail.data.duration}</span>
                 </div>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  {detail.data.summary}
-                </p>
-                <div>
-                  <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                    Key Moments
-                  </h4>
-                  <div className="space-y-2">
-                    {detail.data.keyMoments.map((m, i) => (
-                      <div key={i} className="flex gap-2 text-xs">
-                        <span className="text-muted-foreground font-mono text-[10px] pt-0.5">
-                          {m.timestamp}
-                        </span>
-                        <div className="flex-1">
-                          <span className="italic">
-                            &ldquo;{m.text}&rdquo;
-                          </span>
-                          <span className="ml-1.5">
-                            {sentimentIcon(m.sentiment)}
-                          </span>
+                {detail.data.summary && (
+                  <p className="text-xs text-muted-foreground leading-relaxed">{detail.data.summary}</p>
+                )}
+                {detail.data.keyMoments.length > 0 && (
+                  <div>
+                    <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Key Moments</h4>
+                    <div className="space-y-2">
+                      {detail.data.keyMoments.map((m, i) => (
+                        <div key={i} className="flex gap-2 text-xs">
+                          <span className="text-muted-foreground font-mono text-[10px] pt-0.5">{m.timestamp}</span>
+                          <div className="flex-1">
+                            <span className="italic">&ldquo;{m.text}&rdquo;</span>
+                            <span className="ml-1.5">{sentimentIcon(m.sentiment)}</span>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
                 {detail.data.actionItems.length > 0 && (
                   <div>
-                    <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-                      Action Items
-                    </h4>
+                    <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Action Items</h4>
                     <ul className="space-y-1">
                       {detail.data.actionItems.map((item, i) => (
-                        <li
-                          key={i}
-                          className="text-xs text-muted-foreground flex items-start gap-1.5"
-                        >
+                        <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
                           <CheckCircle2 className="w-3 h-3 mt-0.5 text-primary flex-shrink-0" />
                           {item}
                         </li>
@@ -584,11 +607,9 @@ export function SourcePanel({
               <button
                 onClick={() => {
                   const title =
-                    detail.type === "feedback"
-                      ? detail.data.title
-                      : detail.type === "feature"
-                        ? detail.data.name
-                        : detail.data.title;
+                    detail.type === "feedback" ? detail.data.title
+                    : detail.type === "feature" ? detail.data.name
+                    : detail.data.title;
                   onQuerySource(`Tell me more about: ${title}`);
                   setDetail(null);
                 }}

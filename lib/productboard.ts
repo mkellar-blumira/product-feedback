@@ -30,7 +30,7 @@ async function pbFetchAll(
   if (!token) return null;
 
   const allItems: Record<string, unknown>[] = [];
-  let url = `${API_BASE}${path}?pageLimit=${PAGE_SIZE}`;
+  let url: string | null = `${API_BASE}${path}?pageLimit=${PAGE_SIZE}`;
 
   while (url && allItems.length < maxItems) {
     const page = await pbFetchPage(url, token);
@@ -39,16 +39,25 @@ async function pbFetchAll(
     const items = page.data || [];
     allItems.push(...items);
 
-    const nextLink = page.links?.next;
-    if (nextLink && items.length === PAGE_SIZE && allItems.length < maxItems) {
-      url = typeof nextLink === "string" && nextLink.startsWith("http")
-        ? nextLink
-        : `${API_BASE}${nextLink}`;
+    if (items.length === 0) break;
+
+    let nextUrl: string | null = null;
+    if (page.links?.next) {
+      const link = page.links.next;
+      nextUrl = typeof link === "string" && link.startsWith("http") ? link : `${API_BASE}${link}`;
+    } else if (page.pageCursor || page.nextPageCursor) {
+      const cursor = page.pageCursor || page.nextPageCursor;
+      nextUrl = `${API_BASE}${path}?pageLimit=${PAGE_SIZE}&pageCursor=${cursor}`;
+    }
+
+    if (nextUrl && allItems.length < maxItems && items.length >= PAGE_SIZE) {
+      url = nextUrl;
     } else {
       break;
     }
   }
 
+  console.log(`Productboard ${path}: fetched ${allItems.length} items`);
   return allItems;
 }
 

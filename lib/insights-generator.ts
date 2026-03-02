@@ -2,6 +2,31 @@ import { Insight, FeedbackItem, ProductboardFeature, AttentionCall } from "./typ
 import { AgentData } from "./agent";
 import { generateWithGemini, isGeminiConfigured } from "./gemini";
 
+const NOISE_THEMES = new Set([
+  "5 stars", "4.5 stars", "4 stars", "3.5 stars", "3 stars", "2.5 stars",
+  "2 stars", "1.5 stars", "1 star", "0.5 stars", "0 stars",
+  "5/5", "4/5", "3/5", "2/5", "1/5",
+  "g2", "g2 crowd", "capterra", "trustpilot",
+  "review", "reviews", "rating", "ratings", "stars",
+  "n/a", "na", "none", "other", "misc", "general", "unknown",
+  "yes", "no", "true", "false",
+]);
+
+function isNoiseTheme(theme: string): boolean {
+  const lower = theme.toLowerCase().trim();
+  if (NOISE_THEMES.has(lower)) return true;
+  if (/^\d+(\.\d+)?\s*stars?$/i.test(lower)) return true;
+  if (/^\d+\/\d+$/i.test(lower)) return true;
+  if (/^\d+(\.\d+)?$/.test(lower)) return true;
+  if (lower.length <= 1) return true;
+  if (lower.length > 60) return true;
+  return false;
+}
+
+function cleanThemes(themes: string[]): string[] {
+  return themes.filter((t) => !isNoiseTheme(t));
+}
+
 export async function generateInsights(
   data: AgentData,
   geminiKey?: string
@@ -32,7 +57,7 @@ function generateProgrammaticInsights(data: AgentData): Insight[] {
   const now = new Date().toISOString();
 
   if (data.features.length > 0) {
-    insights.push(...featureStatusInsights(data.features, now));
+    insights.push(...featureInsights(data.features, now));
     insights.push(...topVotedInsights(data.features, now));
   }
 
@@ -53,7 +78,7 @@ function generateProgrammaticInsights(data: AgentData): Insight[] {
   return insights;
 }
 
-function featureStatusInsights(features: ProductboardFeature[], now: string): Insight[] {
+function featureInsights(features: ProductboardFeature[], now: string): Insight[] {
   const insights: Insight[] = [];
   const byStatus: Record<string, ProductboardFeature[]> = {};
   for (const f of features) {
@@ -66,40 +91,59 @@ function featureStatusInsights(features: ProductboardFeature[], now: string): In
   const newFeatures = byStatus["new"] || [];
   const done = byStatus["done"] || [];
 
-  if (features.length > 0) {
+  const activeCount = inProgress.length + planned.length;
+  if (activeCount > 0) {
+    const topActive = [...inProgress, ...planned]
+      .sort((a, b) => b.votes - a.votes)
+      .slice(0, 5);
     insights.push({
-      id: "gen-status-overview",
+      id: "gen-active-pipeline",
       type: "trend",
-      title: `Feature Pipeline: ${inProgress.length} In Progress, ${planned.length} Planned, ${newFeatures.length} New`,
-      description: `Across ${features.length} features: ${done.length} shipped, ${inProgress.length} in progress, ${planned.length} planned, and ${newFeatures.length} new/unplanned. ${
-        newFeatures.length > planned.length
-          ? "There are more unplanned features than planned ones — the backlog may need prioritization."
-          : "The pipeline looks well-organized with a healthy ratio of planned to new items."
-      }`,
+      title: `${activeCount} Active Features: ${inProgress.length} In Progress, ${planned.length} Planned`,
+      description: `Currently active pipeline includes ${inProgress.length} features in progress and ${planned.length} planned. Top active by votes: ${topActive
+        .map((f) => `"${f.name}" (${f.votes} votes)`)
+        .join(", ")}. Additionally, ${done.length} features have shipped.`,
       confidence: 0.95,
-      relatedFeedbackIds: [],
-      themes: ["roadmap", "planning"],
-      impact: inProgress.length === 0 && planned.length > 5 ? "high" : "medium",
+      relatedFeedbackIds: topActive.map((f) => f.id),
+      themes: ["roadmap", "active-development"],
+      impact: "medium",
       createdAt: now,
     });
   }
 
-  if (newFeatures.length > 10) {
+  if (newFeatures.length > features.length * 0.5 && newFeatures.length > 20) {
+    const staleCount = newFeatures.filter((f) => f.votes === 0).length;
     insights.push({
-      id: "gen-backlog-growth",
-      type: "risk",
-      title: `${newFeatures.length} Features in Backlog Without Status`,
-      description: `${newFeatures.length} features are sitting in "new" status without being planned or started. Top by votes: ${newFeatures
-        .sort((a, b) => b.votes - a.votes)
-        .slice(0, 3)
-        .map((f) => `"${f.name}" (${f.votes} votes)`)
-        .join(", ")}. Consider triaging the backlog to ensure high-value items aren't being missed.`,
-      confidence: 0.85,
-      relatedFeedbackIds: newFeatures.slice(0, 5).map((f) => f.id),
-      themes: ["backlog", "prioritization"],
+      id: "gen-backlog-cleanup",
+      type: "recommendation",
+      title: `Backlog Cleanup Needed: ${newFeatures.length} Unplanned Features (${Math.round(newFeatures.length / features.length * 100)}% of total)`,
+      description: `${newFeatures.length} of ${features.length} features sit in "new" without being planned or started${staleCount > 0 ? `, including ${staleCount} with zero votes` : ""}. This suggests accumulated backlog that may need grooming. Consider archiving stale items and triaging the rest to keep the roadmap focused on what matters now.`,
+      confidence: 0.9,
+      relatedFeedbackIds: [],
+      themes: ["backlog-hygiene", "prioritization"],
       impact: "medium",
       createdAt: now,
     });
+
+    const highVoteNew = newFeatures
+      .filter((f) => f.votes > 0)
+      .sort((a, b) => b.votes - a.votes)
+      .slice(0, 5);
+    if (highVoteNew.length > 0) {
+      insights.push({
+        id: "gen-overlooked-requests",
+        type: "risk",
+        title: `${highVoteNew.length} Popular Requests Still Unplanned`,
+        description: `These customer-requested features have votes but haven't been planned or started: ${highVoteNew
+          .map((f) => `"${f.name}" (${f.votes} votes)`)
+          .join(", ")}. These represent unmet customer demand that competitors could address.`,
+        confidence: 0.88,
+        relatedFeedbackIds: highVoteNew.map((f) => f.id),
+        themes: ["customer-demand", "competitive-risk"],
+        impact: "high",
+        createdAt: now,
+      });
+    }
   }
 
   return insights;
@@ -107,7 +151,8 @@ function featureStatusInsights(features: ProductboardFeature[], now: string): In
 
 function topVotedInsights(features: ProductboardFeature[], now: string): Insight[] {
   const insights: Insight[] = [];
-  const sorted = [...features].sort((a, b) => b.votes - a.votes);
+  const active = features.filter((f) => f.status !== "done");
+  const sorted = [...active].sort((a, b) => b.votes - a.votes);
   const top = sorted.slice(0, 5).filter((f) => f.votes > 0);
 
   if (top.length > 0) {
@@ -117,8 +162,8 @@ function topVotedInsights(features: ProductboardFeature[], now: string): Insight
         id: "gen-top-voted-gap",
         type: "recommendation",
         title: `${notStarted.length} of Top 5 Voted Features Not Yet In Progress`,
-        description: `The most requested features by vote count include items that haven't been started: ${notStarted
-          .map((f) => `"${f.name}" (${f.votes} votes, status: ${f.status})`)
+        description: `The most requested active features include items that haven't been started: ${notStarted
+          .map((f) => `"${f.name}" (${f.votes} votes, ${f.status})`)
           .join("; ")}. Accelerating these could reduce churn and competitive pressure.`,
         confidence: 0.9,
         relatedFeedbackIds: notStarted.map((f) => f.id),
@@ -148,26 +193,25 @@ function feedbackVolumeInsight(feedback: FeedbackItem[], now: string): Insight[]
     id: "gen-feedback-volume",
     type: "trend",
     title: `${feedback.length} Feedback Items Across ${Object.keys(bySource).length} Sources`,
-    description: `Feedback breakdown by source: ${sourceBreakdown}. ${
+    description: `Breakdown by source: ${sourceBreakdown}. ${
       feedback.length > 100
-        ? "High volume — consider automated categorization to keep up."
+        ? "High volume — consider automated categorization."
         : "Manageable volume for manual review."
     }`,
     confidence: 0.95,
     relatedFeedbackIds: feedback.slice(0, 5).map((f) => f.id),
-    themes: ["feedback-volume", "operations"],
+    themes: ["feedback-volume"],
     impact: feedback.length > 200 ? "high" : "medium",
     createdAt: now,
   });
 
-  const negative = feedback.filter((f) => f.sentiment === "negative");
   const critical = feedback.filter((f) => f.priority === "critical" || f.priority === "high");
   if (critical.length > 0) {
     insights.push({
       id: "gen-critical-feedback",
       type: "risk",
       title: `${critical.length} High/Critical Priority Feedback Items`,
-      description: `${critical.length} items flagged as critical or high priority${negative.length > 0 ? `, including ${negative.length} with negative sentiment` : ""}. Top items: ${critical
+      description: `${critical.length} items flagged as critical or high priority. Top: ${critical
         .slice(0, 3)
         .map((f) => `"${f.title}" (${f.customer}${f.company ? ` @ ${f.company}` : ""})`)
         .join("; ")}.`,
@@ -187,32 +231,35 @@ function themeInsights(feedback: FeedbackItem[], features: ProductboardFeature[]
 
   const themeCounts: Record<string, { count: number; ids: string[] }> = {};
   for (const fb of feedback) {
-    for (const t of fb.themes) {
-      if (!themeCounts[t]) themeCounts[t] = { count: 0, ids: [] };
-      themeCounts[t].count++;
-      themeCounts[t].ids.push(fb.id);
+    for (const t of cleanThemes(fb.themes)) {
+      const key = t.toLowerCase().trim();
+      if (!themeCounts[key]) themeCounts[key] = { count: 0, ids: [] };
+      themeCounts[key].count++;
+      themeCounts[key].ids.push(fb.id);
     }
   }
   for (const f of features) {
-    for (const t of f.themes) {
-      if (!themeCounts[t]) themeCounts[t] = { count: 0, ids: [] };
-      themeCounts[t].count++;
-      themeCounts[t].ids.push(f.id);
+    for (const t of cleanThemes(f.themes)) {
+      const key = t.toLowerCase().trim();
+      if (!themeCounts[key]) themeCounts[key] = { count: 0, ids: [] };
+      themeCounts[key].count++;
+      themeCounts[key].ids.push(f.id);
     }
   }
 
   const topThemes = Object.entries(themeCounts)
+    .filter(([, d]) => d.count >= 2)
     .sort(([, a], [, b]) => b.count - a.count)
-    .slice(0, 5);
+    .slice(0, 8);
 
   if (topThemes.length > 0) {
     insights.push({
       id: "gen-top-themes",
       type: "theme",
-      title: `Top Themes: ${topThemes.map(([t, d]) => `${t} (${d.count})`).join(", ")}`,
-      description: `The most common themes across feedback and features: ${topThemes
-        .map(([t, d]) => `**${t}** appears ${d.count} times`)
-        .join(", ")}. These represent the strongest signals from your customers and should drive prioritization.`,
+      title: `Top Themes: ${topThemes.slice(0, 4).map(([t, d]) => `${t} (${d.count})`).join(", ")}`,
+      description: `The strongest signals across feedback and features: ${topThemes
+        .map(([t, d]) => `**${t}** (${d.count}x)`)
+        .join(", ")}. These should drive roadmap prioritization.`,
       confidence: 0.88,
       relatedFeedbackIds: topThemes.flatMap(([, d]) => d.ids).slice(0, 10),
       themes: topThemes.map(([t]) => t),
@@ -245,7 +292,7 @@ function companyInsights(feedback: FeedbackItem[], now: string): Insight[] {
       id: "gen-vocal-accounts",
       type: "theme",
       title: `Most Vocal Accounts: ${topCompanies.slice(0, 3).map(([c, d]) => `${c} (${d.count})`).join(", ")}`,
-      description: `These accounts have the most feedback items. High feedback volume can signal engagement, but also frustration. Review whether their top concerns align with the current roadmap.`,
+      description: `These accounts have the most feedback. High volume can signal engagement or frustration — review whether their top concerns align with the roadmap.`,
       confidence: 0.82,
       relatedFeedbackIds: topCompanies.flatMap(([, d]) => d.items.map((i) => i.id)).slice(0, 10),
       themes: ["customer-engagement", "account-health"],
@@ -266,7 +313,7 @@ function callInsights(calls: AttentionCall[], now: string): Insight[] {
       id: "gen-call-summary",
       type: "trend",
       title: `${calls.length} Calls Tracked with ${totalActionItems} Action Items`,
-      description: `Across ${calls.length} recorded calls, there are ${totalActionItems} action items to follow up on. Recent calls: ${calls
+      description: `Across ${calls.length} recorded calls, there are ${totalActionItems} action items. Recent: ${calls
         .slice(0, 3)
         .map((c) => `"${c.title}" (${c.date})`)
         .join(", ")}.`,
@@ -286,12 +333,12 @@ function gapInsights(features: ProductboardFeature[], feedback: FeedbackItem[], 
 
   const feedbackThemes = new Set<string>();
   for (const fb of feedback) {
-    for (const t of fb.themes) feedbackThemes.add(t.toLowerCase());
+    for (const t of cleanThemes(fb.themes)) feedbackThemes.add(t.toLowerCase());
   }
 
   const featureThemes = new Set<string>();
   for (const f of features) {
-    for (const t of f.themes) featureThemes.add(t.toLowerCase());
+    for (const t of cleanThemes(f.themes)) featureThemes.add(t.toLowerCase());
   }
 
   const unaddressed = Array.from(feedbackThemes).filter((t) => !featureThemes.has(t));
@@ -299,8 +346,8 @@ function gapInsights(features: ProductboardFeature[], feedback: FeedbackItem[], 
     insights.push({
       id: "gen-theme-gaps",
       type: "anomaly",
-      title: `${unaddressed.length} Feedback Themes Not Covered by Any Feature`,
-      description: `Feedback mentions themes that don't appear in any Productboard feature: ${unaddressed.slice(0, 8).join(", ")}${unaddressed.length > 8 ? ` and ${unaddressed.length - 8} more` : ""}. These may represent unaddressed customer needs or opportunities for new features.`,
+      title: `${unaddressed.length} Feedback Themes Not on Any Feature`,
+      description: `Customer feedback mentions themes with no matching feature: ${unaddressed.slice(0, 6).join(", ")}${unaddressed.length > 6 ? ` and ${unaddressed.length - 6} more` : ""}. These may be unaddressed needs or new opportunities.`,
       confidence: 0.75,
       relatedFeedbackIds: [],
       themes: unaddressed.slice(0, 5),
@@ -314,35 +361,38 @@ function gapInsights(features: ProductboardFeature[], feedback: FeedbackItem[], 
 
 async function generateAIInsights(data: AgentData, geminiKey?: string): Promise<Insight[]> {
   const summaryParts: string[] = [];
-  summaryParts.push(`Data summary: ${data.feedback.length} feedback items, ${data.features.length} features, ${data.calls.length} calls.`);
+  summaryParts.push(`Data: ${data.feedback.length} feedback, ${data.features.length} features, ${data.calls.length} calls.`);
 
-  if (data.features.length > 0) {
-    summaryParts.push(`\nTop 10 features by votes:\n${[...data.features].sort((a, b) => b.votes - a.votes).slice(0, 10).map((f) => `- ${f.name} (${f.votes} votes, status: ${f.status})`).join("\n")}`);
+  const activeFeatures = data.features.filter((f) => f.status !== "done" && f.status !== "new");
+  if (activeFeatures.length > 0) {
+    summaryParts.push(`\nActive features (in progress/planned), top 10 by votes:\n${activeFeatures.sort((a, b) => b.votes - a.votes).slice(0, 10).map((f) => `- ${f.name} (${f.votes} votes, ${f.status})`).join("\n")}`);
   }
 
   if (data.feedback.length > 0) {
-    summaryParts.push(`\nRecent 20 feedback items:\n${data.feedback.slice(0, 20).map((f) => `- [${f.source}] ${f.title} (${f.sentiment}, ${f.priority}) — ${f.content.slice(0, 100)}`).join("\n")}`);
+    summaryParts.push(`\nRecent 20 feedback:\n${data.feedback.slice(0, 20).map((f) => `- [${f.source}] ${f.title}${f.company ? ` (${f.company})` : ""} — ${f.content.slice(0, 120)}`).join("\n")}`);
   }
 
   if (data.calls.length > 0) {
-    summaryParts.push(`\nRecent 5 calls:\n${data.calls.slice(0, 5).map((c) => `- ${c.title} (${c.date}) — ${c.summary.slice(0, 100)}`).join("\n")}`);
+    summaryParts.push(`\nRecent 5 calls:\n${data.calls.slice(0, 5).map((c) => `- ${c.title} (${c.date}) — ${c.summary.slice(0, 120)}`).join("\n")}`);
   }
 
-  const prompt = `Analyze this customer feedback data and generate 3-5 key insights. For each insight, provide a JSON object with these fields:
-- id: unique string starting with "ai-"
-- type: one of "trend", "risk", "recommendation", "theme", "anomaly"
-- title: concise title (under 80 chars)
-- description: 2-3 sentence analysis
-- confidence: number 0.0-1.0
-- themes: array of relevant theme strings
-- impact: "high", "medium", or "low"
+  const prompt = `Analyze this customer feedback data and generate 3-5 actionable insights. Focus on real product trends, risks, and opportunities — NOT ratings/stars/review scores.
 
-Return ONLY a JSON array of insight objects, no other text.
+For each insight, provide a JSON object:
+- id: unique string starting with "ai-"
+- type: "trend" | "risk" | "recommendation" | "theme" | "anomaly"
+- title: concise title (under 80 chars)
+- description: 2-3 sentence analysis with specifics
+- confidence: 0.0-1.0
+- themes: array of topic-level theme strings (NOT star ratings)
+- impact: "high" | "medium" | "low"
+
+Return ONLY a JSON array, no markdown or explanation.
 
 ${summaryParts.join("\n")}`;
 
   const response = await generateWithGemini(
-    "You are a data analyst. Respond with valid JSON only.",
+    "You are a product analytics expert. Respond with valid JSON only. Focus on actionable product insights, not review metrics.",
     prompt,
     geminiKey
   );
@@ -361,7 +411,7 @@ ${summaryParts.join("\n")}`;
       description: (item.description as string) || "",
       confidence: typeof item.confidence === "number" ? item.confidence : 0.7,
       relatedFeedbackIds: [],
-      themes: Array.isArray(item.themes) ? item.themes : [],
+      themes: Array.isArray(item.themes) ? item.themes.filter((t: string) => !isNoiseTheme(t)) : [],
       impact: (item.impact as string) || "medium",
       createdAt: new Date().toISOString(),
     })) as Insight[];
