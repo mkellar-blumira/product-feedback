@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-blumira",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Blumira community node for n8n.",
   "license": "MIT",
   "author": "mkellar@blumira.com",
