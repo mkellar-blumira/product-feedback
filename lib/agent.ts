@@ -105,7 +105,7 @@ function lookupDetails(ids: string[], data: AgentData, detailed = false): string
 
 const SYSTEM_PROMPT = `You are a concise product intelligence analyst. Synthesize data into brief, actionable insights. Focus on recent changes. Be opinionated. Include direct customer quotes when available.
 
-IMPORTANT: When feedback or features mention product names (Zapier, Salesforce, Autotask, Jira, etc.), those are the products customers want INTEGRATED — not the source of the feedback. The source is always shown in brackets like [productboard] or [Jira CX-1234]. Don't confuse the integration being requested with the system that captured the request.`;
+IMPORTANT about data sources: Feedback arrives in Productboard through various pipelines (Zapier forms, email integrations, CRM syncs, manual entry, etc.). The tool that pushed the data into Productboard (like Zapier) is just the delivery mechanism — it is NOT the subject of the feedback. Always read the actual TITLE and CONTENT of the feedback to understand what the customer is requesting. The source system is shown in brackets like [Source: productboard] or [Jira CX-1234]. For example, a Productboard note titled "Integration Request (Salesforce)" means the customer wants a Salesforce integration — Productboard is where it was captured, and Zapier may have been the pipeline that got it there.`;
 
 const BROAD_KEYWORDS = ["summary", "overview", "brief", "executive", "all", "comprehensive", "status", "what's happening", "state of", "pulse", "report"];
 
