@@ -116,30 +116,23 @@ async function jiraSearchWithFallback(
   auth: ResolvedAuth, jqlStr: string, pageSize: number, startAt: number, fields: string[]
 ): Promise<{ data: unknown; error: string | null }> {
   const bases = jiraBases(auth);
+  const errors: string[] = [];
+  const jqlEncoded = encodeURIComponent(jqlStr);
+  const fieldStr = fields.join(",");
 
-  for (const base of bases) {
-    const { data, error, status } = await atlFetch(
-      `${base}/search/jql`, auth, "POST",
-      { jql: jqlStr, maxResults: pageSize, startAt, fields }
-    );
+  const attempts = [
+    ...bases.map((b) => ({ url: `${b}/search/jql`, method: "POST" as const, body: { jql: jqlStr, maxResults: pageSize, startAt, fields } })),
+    ...bases.map((b) => ({ url: `${b}/search?jql=${jqlEncoded}&maxResults=${pageSize}&startAt=${startAt}&fields=${fieldStr}`, method: "GET" as const, body: undefined })),
+  ];
+
+  for (const attempt of attempts) {
+    const { data, error } = await atlFetch(attempt.url, auth, attempt.method, attempt.body);
     if (!error && data) return { data, error: null };
-    if (status !== 410 && status !== 404 && status !== 405) {
-      const { data: gd, error: ge, status: gs } = await atlFetch(
-        `${base}/search?jql=${encodeURIComponent(jqlStr)}&maxResults=${pageSize}&startAt=${startAt}&fields=${fields.join(",")}`, auth
-      );
-      if (!ge && gd) return { data: gd, error: null };
-      if (gs !== 410 && gs !== 404) return { data: null, error: ge };
-    }
+    if (error) errors.push(`${attempt.method} ${attempt.url.split("/rest/")[1]?.slice(0, 40) || "?"}: ${error.slice(0, 80)}`);
   }
 
-  for (const base of bases) {
-    const { data, error } = await atlFetch(
-      `${base}/search?jql=${encodeURIComponent(jqlStr)}&maxResults=${pageSize}&startAt=${startAt}&fields=${fields.join(",")}`, auth
-    );
-    if (!error && data) return { data, error: null };
-  }
-
-  return { data: null, error: "All Jira search endpoints returned errors. Check token scopes (read:jira-work)." };
+  console.error(`Jira search: all ${attempts.length} attempts failed:\n${errors.join("\n")}`);
+  return { data: null, error: `All Jira search endpoints failed. Last: ${errors[errors.length - 1]?.slice(0, 100) || "unknown"}. Check token scopes (read:jira-work).` };
 }
 
 function parseFilterList(filter: string | undefined): string[] {

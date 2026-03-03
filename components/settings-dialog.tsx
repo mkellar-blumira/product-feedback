@@ -343,9 +343,9 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
                                 const current = parseFilterList(fields.atlassianJiraFilter?.value);
                                 const next = selected ? current.filter((s) => s.toUpperCase() !== p.key.toUpperCase()) : [...current, p.key];
                                 updateField("atlassianJiraFilter", { value: next.join(", "), dirty: true });
-                              }} className="rounded" />
-                              <span className="font-mono text-[10px] text-muted-foreground w-12 flex-shrink-0">{p.key}</span>
+                              }} className="rounded flex-shrink-0" />
                               <span className="truncate">{p.name}</span>
+                              <span className="font-mono text-[9px] text-muted-foreground flex-shrink-0 ml-auto">{p.key}</span>
                             </label>
                           );
                         })}
@@ -379,9 +379,9 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
                                 const current = parseFilterList(fields.atlassianConfluenceFilter?.value);
                                 const next = selected ? current.filter((f) => f.toUpperCase() !== s.key.toUpperCase()) : [...current, s.key];
                                 updateField("atlassianConfluenceFilter", { value: next.join(", "), dirty: true });
-                              }} className="rounded" />
-                              <span className="font-mono text-[10px] text-muted-foreground w-12 flex-shrink-0">{s.key}</span>
+                              }} className="rounded flex-shrink-0" />
                               <span className="truncate">{s.name}</span>
+                              <span className="font-mono text-[9px] text-muted-foreground flex-shrink-0 ml-auto">{s.key.length > 10 ? s.key.slice(0, 10) + "…" : s.key}</span>
                             </label>
                           );
                         })}
