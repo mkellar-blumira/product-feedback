@@ -55,14 +55,49 @@ export async function POST(req: NextRequest) {
       try {
         const cleanDomain = domain.replace(/\.atlassian\.net\/?$/, "").replace(/^https?:\/\//, "");
         const encoded = Buffer.from(`${email}:${token}`).toString("base64");
-        const res = await fetch(`https://${cleanDomain}.atlassian.net/rest/api/3/myself`, {
-          headers: { Authorization: `Basic ${encoded}`, Accept: "application/json" },
-        });
-        if (res.ok) {
-          const user = await res.json();
-          return NextResponse.json({ valid: true, user: user.displayName || user.emailAddress });
+        const authHeader = `Basic ${encoded}`;
+
+        const classicRes = await fetch(`https://${cleanDomain}.atlassian.net/rest/api/3/myself`, {
+          headers: { Authorization: authHeader, Accept: "application/json" },
+        }).catch(() => null);
+
+        if (classicRes?.ok) {
+          const user = await classicRes.json();
+          return NextResponse.json({ valid: true, user: user.displayName || user.emailAddress, mode: "classic" });
         }
-        return NextResponse.json({ valid: false, error: `API returned ${res.status}: ${res.statusText}` });
+
+        let cloudId: string | null = null;
+        try {
+          const tenantRes = await fetch(`https://${cleanDomain}.atlassian.net/_edge/tenant_info`);
+          if (tenantRes.ok) {
+            const tenant = await tenantRes.json();
+            cloudId = tenant.cloudId || null;
+          }
+        } catch { /* ignore */ }
+
+        if (cloudId) {
+          const scopedRes = await fetch(`https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/myself`, {
+            headers: { Authorization: authHeader, Accept: "application/json" },
+          }).catch(() => null);
+
+          if (scopedRes?.ok) {
+            const user = await scopedRes.json();
+            return NextResponse.json({ valid: true, user: user.displayName || user.emailAddress, mode: "scoped" });
+          }
+
+          if (scopedRes) {
+            return NextResponse.json({
+              valid: false,
+              error: `Scoped token returned ${scopedRes.status}. Ensure your token has read:jira-work and read:confluence-content.all scopes.`,
+            });
+          }
+        }
+
+        const status = classicRes?.status || "unknown";
+        return NextResponse.json({
+          valid: false,
+          error: `Auth failed (${status}). For classic tokens: check email + token. For scoped tokens: ensure read:jira-work scope is enabled.`,
+        });
       } catch (err: unknown) {
         return NextResponse.json({ valid: false, error: err instanceof Error ? err.message : "Connection failed" });
       }
