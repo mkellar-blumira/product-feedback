@@ -112,27 +112,49 @@ async function atlFetch(url: string, auth: ResolvedAuth, method = "GET", body?: 
   }
 }
 
+function classicJiraV2Base(domain: string): string {
+  return `https://${domain}.atlassian.net/rest/api/2`;
+}
+
+function scopedJiraV2Base(cloudId: string): string {
+  return `https://api.atlassian.com/ex/jira/${cloudId}/rest/api/2`;
+}
+
 async function jiraSearchWithFallback(
   auth: ResolvedAuth, jqlStr: string, pageSize: number, startAt: number, fields: string[]
 ): Promise<{ data: unknown; error: string | null }> {
   const bases = jiraBases(auth);
+  const v2Bases: string[] = [];
+  if (auth.useScoped && auth.cloudId) {
+    v2Bases.push(scopedJiraV2Base(auth.cloudId));
+    v2Bases.push(classicJiraV2Base(auth.domain));
+  } else {
+    v2Bases.push(classicJiraV2Base(auth.domain));
+    if (auth.cloudId) v2Bases.push(scopedJiraV2Base(auth.cloudId));
+  }
+
   const errors: string[] = [];
   const jqlEncoded = encodeURIComponent(jqlStr);
   const fieldStr = fields.join(",");
 
-  const attempts = [
-    ...bases.map((b) => ({ url: `${b}/search/jql`, method: "POST" as const, body: { jql: jqlStr, maxResults: pageSize, startAt, fields } })),
-    ...bases.map((b) => ({ url: `${b}/search?jql=${jqlEncoded}&maxResults=${pageSize}&startAt=${startAt}&fields=${fieldStr}`, method: "GET" as const, body: undefined })),
+  const attempts: { url: string; method: "GET" | "POST"; body?: unknown; label: string }[] = [
+    ...bases.map((b) => ({ url: `${b}/search/jql`, method: "POST" as const, body: { jql: jqlStr, maxResults: pageSize, startAt, fields }, label: "v3 POST /search/jql" })),
+    ...bases.map((b) => ({ url: `${b}/search?jql=${jqlEncoded}&maxResults=${pageSize}&startAt=${startAt}&fields=${fieldStr}`, method: "GET" as const, label: "v3 GET /search" })),
+    ...v2Bases.map((b) => ({ url: `${b}/search?jql=${jqlEncoded}&maxResults=${pageSize}&startAt=${startAt}&fields=${fieldStr}`, method: "GET" as const, label: "v2 GET /search" })),
+    ...v2Bases.map((b) => ({ url: `${b}/search`, method: "POST" as const, body: { jql: jqlStr, maxResults: pageSize, startAt, fields }, label: "v2 POST /search" })),
   ];
 
   for (const attempt of attempts) {
     const { data, error } = await atlFetch(attempt.url, auth, attempt.method, attempt.body);
-    if (!error && data) return { data, error: null };
-    if (error) errors.push(`${attempt.method} ${attempt.url.split("/rest/")[1]?.slice(0, 40) || "?"}: ${error.slice(0, 80)}`);
+    if (!error && data) {
+      console.log(`Jira search: ${attempt.label} succeeded`);
+      return { data, error: null };
+    }
+    if (error) errors.push(`${attempt.label}: ${error.slice(0, 60)}`);
   }
 
   console.error(`Jira search: all ${attempts.length} attempts failed:\n${errors.join("\n")}`);
-  return { data: null, error: `All Jira search endpoints failed. Last: ${errors[errors.length - 1]?.slice(0, 100) || "unknown"}. Check token scopes (read:jira-work).` };
+  return { data: null, error: `Jira search failed (tried ${attempts.length} endpoints). Errors: ${errors.slice(-2).join("; ").slice(0, 150)}` };
 }
 
 function parseFilterList(filter: string | undefined): string[] {
@@ -157,19 +179,25 @@ export async function getJiraProjects(
   if (!rawAuth) return [];
   const auth = await resolveAuth(rawAuth);
 
-  for (const base of jiraBases(auth)) {
-    const { data } = await atlFetch(`${base}/project/search?maxResults=200&orderBy=name`, auth);
-    if (data) {
-      const result = data as Record<string, unknown>;
-      const values = (result.values || result) as Record<string, unknown>[];
-      if (Array.isArray(values)) {
-        const projects = values.map((p) => ({ key: (p.key as string) || "", name: (p.name as string) || "" })).filter((p) => p.key);
-        if (projects.length > 0) return projects;
+  const allBases = [...jiraBases(auth)];
+  if (auth.useScoped && auth.cloudId) {
+    allBases.push(scopedJiraV2Base(auth.cloudId), classicJiraV2Base(auth.domain));
+  } else {
+    allBases.push(classicJiraV2Base(auth.domain));
+    if (auth.cloudId) allBases.push(scopedJiraV2Base(auth.cloudId));
+  }
+
+  for (const base of allBases) {
+    for (const path of ["/project/search?maxResults=200&orderBy=name", "/project?maxResults=200"]) {
+      const { data } = await atlFetch(`${base}${path}`, auth);
+      if (data) {
+        const result = data as Record<string, unknown>;
+        const arr = (result.values || (Array.isArray(result) ? result : null)) as Record<string, unknown>[] | null;
+        if (arr && Array.isArray(arr)) {
+          const projects = arr.map((p) => ({ key: (p.key as string) || "", name: (p.name as string) || "" })).filter((p) => p.key);
+          if (projects.length > 0) return projects;
+        }
       }
-    }
-    const { data: d2 } = await atlFetch(`${base}/project?maxResults=200`, auth);
-    if (d2 && Array.isArray(d2)) {
-      return (d2 as Record<string, unknown>[]).map((p) => ({ key: (p.key as string) || "", name: (p.name as string) || "" })).filter((p) => p.key);
     }
   }
   return [];

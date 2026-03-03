@@ -60,7 +60,7 @@ function lookupDetails(ids: string[], data: AgentData): string[] {
   const details: string[] = [];
   for (const id of ids) {
     const fb = data.feedback.find((f) => f.id === id);
-    if (fb) { const w = shortDate(fb as unknown as Record<string, unknown>); details.push(`[Feedback, ${w}] ${fb.title} — ${fb.customer}${fb.company ? ` (${fb.company})` : ""}: ${fb.content.slice(0, 150)}`); continue; }
+    if (fb) { const w = shortDate(fb as unknown as Record<string, unknown>); details.push(`[Feedback, ${w}] ${fb.title} — ${fb.customer}${fb.company ? ` (${fb.company})` : ""}: "${fb.content.slice(0, 200)}"`); continue; }
     const feat = data.features.find((f) => f.id === id);
     if (feat) { details.push(`[Feature] ${feat.name} — ${feat.status}, ${feat.votes} votes`); continue; }
     const call = data.calls.find((c) => c.id === id);
@@ -75,7 +75,7 @@ function lookupDetails(ids: string[], data: AgentData): string[] {
   return details;
 }
 
-const SYSTEM_PROMPT = `You are a concise product intelligence analyst. You synthesize customer feedback, Jira tickets, and feature data into brief, actionable insights. Focus on what's recent and changing. Be opinionated about priorities.`;
+const SYSTEM_PROMPT = `You are a concise product intelligence analyst. Synthesize data into brief, actionable insights. Focus on recent changes. Be opinionated. Include direct customer quotes when available — they make insights concrete and compelling.`;
 
 const BROAD_KEYWORDS = ["summary", "overview", "brief", "executive", "all", "comprehensive", "status", "what's happening", "state of", "pulse", "report"];
 
@@ -346,25 +346,27 @@ export async function chat(
 ${historyText ? `\nHistory:\n${historyText}\n` : ""}
 Q: ${userMessage}
 
-RESPOND USING EXACTLY THIS TEMPLATE:
+USE THIS EXACT FORMAT:
 
-**[Bold 1-2 sentence TL;DR answering the question directly]**
+**[1-2 sentence answer to the question. Be specific.]**
 
-## [One heading for the main analysis]
+## [Heading]
 
-[2-3 short paragraphs max. Focus on what's NEW (last 14 days). Reference specific dates. Never cite total database size as a finding.]
+[1-2 paragraphs. What's new, what changed, what matters. Reference dates.]
+
+> "[direct customer quote if available in the data]" — Customer Name
 
 | Item | Detail | When |
 | --- | --- | --- |
-| [max 5 rows] | | |
+[max 5 rows, no empty cells]
 
 ## Next Steps
 
-1. [action item with owner/timeline]
-2. [action item with owner/timeline]
-3. [action item with owner/timeline]
+1. [owner] [action] [by when]
+2. [owner] [action] [by when]
+3. [owner] [action] [by when]
 
-RULES: 300 words max. No colon-alignment in tables (no :--- ever). No bullet lists longer than 3 items. No filler phrases.`;
+HARD CONSTRAINTS: 250 words max. No :--- in tables. No multi-sentence action items. Include a customer quote if one exists in the data. Skip the quote section if none available.`;
 
   const inputTokens = estimateTokens(SYSTEM_PROMPT) + estimateTokens(prompt);
 
