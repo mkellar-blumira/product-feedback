@@ -75,30 +75,7 @@ function lookupDetails(ids: string[], data: AgentData): string[] {
   return details;
 }
 
-const SYSTEM_PROMPT = `You are a concise Customer Feedback Intelligence Agent.
-
-HARD RULES:
-- MAXIMUM 400 words.
-- First line: bold 1-2 sentence TL;DR.
-- Tables: simple | Header | then | --- | format. NO colon alignment.
-- Max 2 headings (##).
-- NEVER list more than 5 items. Say "and X more" for the rest.
-- End with exactly 3 numbered action items, one line each.
-- No filler phrases.
-
-TEMPORAL RULES (critical):
-- The data includes timestamps. USE THEM. Always note WHEN things happened.
-- Focus on what's NEW and CHANGING, not total counts of all-time data.
-- "Recent" = last 14 days. Older items are historical context only.
-- Identify trends: what's increasing, what's new this week vs last month.
-- Never say "1000 items indicate high volume" — that's just the database size. Instead say "12 new items this week, up from 8 last week, focused on X theme."
-- Date ranges and recency markers are provided — reference them specifically.
-
-ANALYSIS RULES:
-- Synthesize patterns across recent data. Do NOT enumerate items.
-- Lead with what changed recently and its impact.
-- Cross-reference sources when possible.
-- Be opinionated about priorities.`;
+const SYSTEM_PROMPT = `You are a concise product intelligence analyst. You synthesize customer feedback, Jira tickets, and feature data into brief, actionable insights. Focus on what's recent and changing. Be opinionated about priorities.`;
 
 const BROAD_KEYWORDS = ["summary", "overview", "brief", "executive", "all", "comprehensive", "status", "what's happening", "state of", "pulse", "report"];
 
@@ -369,7 +346,25 @@ export async function chat(
 ${historyText ? `\nHistory:\n${historyText}\n` : ""}
 Q: ${userMessage}
 
-400 words max. TL;DR first. Tables for 3+ items. 3 action items.`;
+RESPOND USING EXACTLY THIS TEMPLATE:
+
+**[Bold 1-2 sentence TL;DR answering the question directly]**
+
+## [One heading for the main analysis]
+
+[2-3 short paragraphs max. Focus on what's NEW (last 14 days). Reference specific dates. Never cite total database size as a finding.]
+
+| Item | Detail | When |
+| --- | --- | --- |
+| [max 5 rows] | | |
+
+## Next Steps
+
+1. [action item with owner/timeline]
+2. [action item with owner/timeline]
+3. [action item with owner/timeline]
+
+RULES: 300 words max. No colon-alignment in tables (no :--- ever). No bullet lists longer than 3 items. No filler phrases.`;
 
   const inputTokens = estimateTokens(SYSTEM_PROMPT) + estimateTokens(prompt);
 
