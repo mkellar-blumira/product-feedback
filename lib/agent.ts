@@ -28,7 +28,7 @@ export interface AgentData {
 
 export interface ChatResult {
   response: string;
-  sources: { type: string; id: string; title: string }[];
+  sources: { type: string; id: string; title: string; url?: string }[];
   tokenEstimate: { input: number; output: number; total: number };
 }
 
@@ -341,7 +341,7 @@ export async function chat(
   const searchLimit = contextMode === "focused" ? 8 : contextMode === "standard" ? 12 : 15;
   const results = store.search(userMessage, { limit: searchLimit });
 
-  const sources: { type: string; id: string; title: string }[] = [];
+  const sources: { type: string; id: string; title: string; url?: string }[] = [];
   const searchParts: string[] = [];
   const detailed = wantsDetail(userMessage);
 
@@ -351,13 +351,29 @@ export async function chat(
     if (details.length > 0) searchParts.push(details[0]);
 
     let title = doc.id;
-    if (doc.type === "feedback") title = data.feedback.find((f) => f.id === doc.id)?.title || title;
-    else if (doc.type === "feature") title = data.features.find((f) => f.id === doc.id)?.name || title;
-    else if (doc.type === "call") title = data.calls.find((c) => c.id === doc.id)?.title || title;
-    else if (doc.type === "insight") title = data.insights.find((i) => i.id === doc.id)?.title || title;
-    else if (doc.type === "jira") { const j = data.jiraIssues.find((j) => j.id === doc.id); title = j ? `${j.key}: ${j.summary}` : title; }
-    else if (doc.type === "confluence") title = data.confluencePages.find((p) => p.id === doc.id)?.title || title;
-    sources.push({ type: doc.type, id: doc.id, title });
+    let url: string | undefined;
+    if (doc.type === "feedback") {
+      const fb = data.feedback.find((f) => f.id === doc.id);
+      title = fb?.title || title;
+      if (fb?.metadata?.sourceUrl) url = fb.metadata.sourceUrl;
+    } else if (doc.type === "feature") {
+      title = data.features.find((f) => f.id === doc.id)?.name || title;
+    } else if (doc.type === "call") {
+      title = data.calls.find((c) => c.id === doc.id)?.title || title;
+    } else if (doc.type === "insight") {
+      title = data.insights.find((i) => i.id === doc.id)?.title || title;
+    } else if (doc.type === "jira") {
+      const j = data.jiraIssues.find((j) => j.id === doc.id);
+      if (j) {
+        title = `${j.key}: ${j.summary}`;
+        const domain = keys.atlassianDomain || process.env.ATLASSIAN_DOMAIN || "";
+        if (domain) url = `https://${domain.replace(/\.atlassian\.net\/?$/, "")}.atlassian.net/browse/${j.key}`;
+      }
+    } else if (doc.type === "confluence") {
+      const p = data.confluencePages.find((p) => p.id === doc.id);
+      if (p) { title = p.title; url = p.url; }
+    }
+    sources.push({ type: doc.type, id: doc.id, title, url });
   }
 
   const searchContext = searchParts.join("\n");

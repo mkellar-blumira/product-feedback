@@ -14,6 +14,7 @@ import {
   MessageSquare,
   BarChart3,
   AlertTriangle,
+  ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
@@ -54,42 +55,8 @@ function fixMarkdown(text: string): string {
   const fixed: string[] = [];
 
   for (const line of lines) {
-    if (!line.includes("|") || line.includes("\n")) {
-      fixed.push(line);
-      continue;
-    }
-
-    const sepMatch = line.match(/\|\s*---\s*\|/);
-    if (!sepMatch) {
-      fixed.push(line);
-      continue;
-    }
-
-    const parts = line.split("|").map((s) => s.trim());
-    const nonEmpty = parts.filter((s) => s !== "");
-    const sepCount = nonEmpty.filter((s) => /^-{1,}$/.test(s)).length;
-
-    if (sepCount < 2) {
-      fixed.push(line);
-      continue;
-    }
-
-    const colCount = sepCount;
-    const cells = nonEmpty;
-    const rows: string[] = [];
-
-    for (let i = 0; i < cells.length; i += colCount) {
-      const row = cells.slice(i, i + colCount);
-      if (row.length === colCount) {
-        rows.push(`| ${row.join(" | ")} |`);
-      } else if (row.length > 0) {
-        const padded = [...row, ...Array(colCount - row.length).fill("")];
-        rows.push(`| ${padded.join(" | ")} |`);
-      }
-    }
-
-    if (rows.length >= 3) {
-      fixed.push(rows.join("\n"));
+    if (line.includes("| --- |") && (line.match(/\|/g) || []).length > 8) {
+      fixed.push(line.replace(/\|\s*\|/g, "|\n|"));
     } else {
       fixed.push(line);
     }
@@ -272,30 +239,33 @@ Try one of the suggested queries below to get started.`,
               </div>
               {msg.sources && msg.sources.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                  {msg.sources.slice(0, 5).map((src, i) => (
-                    <span
-                      key={i}
-                      className={cn(
-                        "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium",
-                        src.type === "feedback" &&
-                          "bg-blue-500/10 text-blue-600",
-                        src.type === "feature" &&
-                          "bg-green-500/10 text-green-600",
-                        src.type === "call" &&
-                          "bg-amber-500/10 text-amber-600",
-                        src.type === "insight" &&
-                          "bg-purple-500/10 text-purple-600"
-                      )}
-                    >
-                      <Search className="w-2.5 h-2.5" />
-                      {src.title.length > 30
-                        ? src.title.slice(0, 30) + "…"
-                        : src.title}
-                    </span>
-                  ))}
-                  {msg.sources.length > 5 && (
+                  {msg.sources.slice(0, 8).map((src, i) => {
+                    const label = src.title.length > 40 ? src.title.slice(0, 40) + "…" : src.title;
+                    const colorClass = cn(
+                      "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium transition-colors",
+                      src.type === "feedback" && "bg-blue-500/10 text-blue-600",
+                      src.type === "feature" && "bg-green-500/10 text-green-600",
+                      src.type === "call" && "bg-amber-500/10 text-amber-600",
+                      src.type === "insight" && "bg-purple-500/10 text-purple-600",
+                      src.type === "jira" && "bg-orange-500/10 text-orange-600",
+                      src.type === "confluence" && "bg-cyan-500/10 text-cyan-600",
+                      src.url && "hover:opacity-80 cursor-pointer"
+                    );
+                    return src.url ? (
+                      <a key={i} href={src.url} target="_blank" rel="noopener noreferrer" className={colorClass}>
+                        <ExternalLink className="w-2.5 h-2.5" />
+                        {label}
+                      </a>
+                    ) : (
+                      <span key={i} className={colorClass}>
+                        <Search className="w-2.5 h-2.5" />
+                        {label}
+                      </span>
+                    );
+                  })}
+                  {msg.sources.length > 8 && (
                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-muted text-muted-foreground">
-                      +{msg.sources.length - 5} more
+                      +{msg.sources.length - 8} more
                     </span>
                   )}
                 </div>

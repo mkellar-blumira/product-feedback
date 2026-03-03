@@ -83,7 +83,7 @@ export interface ChatMessage {
   role: "user" | "assistant" | "system";
   content: string;
   timestamp: string;
-  sources?: { type: string; id: string; title: string }[];
+  sources?: { type: string; id: string; title: string; url?: string }[];
   isStreaming?: boolean;
 }
 
