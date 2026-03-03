@@ -16,17 +16,12 @@ interface ResolvedAuth extends AtlassianAuth {
 
 const resolvedAuthCache = new Map<string, ResolvedAuth>();
 
-function getAuth(
-  overrideDomain?: string,
-  overrideEmail?: string,
-  overrideToken?: string
-): AtlassianAuth | null {
-  const domain = overrideDomain || process.env.ATLASSIAN_DOMAIN;
-  const email = overrideEmail || process.env.ATLASSIAN_EMAIL;
-  const token = overrideToken || process.env.ATLASSIAN_API_TOKEN;
+function getAuth(d?: string, e?: string, t?: string): AtlassianAuth | null {
+  const domain = d || process.env.ATLASSIAN_DOMAIN;
+  const email = e || process.env.ATLASSIAN_EMAIL;
+  const token = t || process.env.ATLASSIAN_API_TOKEN;
   if (!domain || !email || !token) return null;
-  const cleanDomain = domain.replace(/\.atlassian\.net\/?$/, "").replace(/^https?:\/\//, "");
-  return { domain: cleanDomain, email, token };
+  return { domain: domain.replace(/\.atlassian\.net\/?$/, "").replace(/^https?:\/\//, ""), email, token };
 }
 
 function basicAuthHeader(auth: AtlassianAuth): string {
@@ -40,42 +35,46 @@ async function resolveAuth(auth: AtlassianAuth): Promise<ResolvedAuth> {
 
   let cloudId: string | null = null;
   try {
-    const tenantRes = await fetch(`https://${auth.domain}.atlassian.net/_edge/tenant_info`);
-    if (tenantRes.ok) cloudId = ((await tenantRes.json()) as Record<string, string>).cloudId || null;
+    const r = await fetch(`https://${auth.domain}.atlassian.net/_edge/tenant_info`);
+    if (r.ok) cloudId = ((await r.json()) as Record<string, string>).cloudId || null;
   } catch { /* ignore */ }
 
-  const classicRes = await fetch(`https://${auth.domain}.atlassian.net/rest/api/3/myself`, {
+  const classicOk = await fetch(`https://${auth.domain}.atlassian.net/rest/api/3/myself`, {
     headers: { Authorization: basicAuthHeader(auth), Accept: "application/json" },
-  }).catch(() => null);
+  }).then((r) => r.ok).catch(() => false);
 
-  if (classicRes?.ok) {
-    const resolved: ResolvedAuth = { ...auth, cloudId, useScoped: false };
-    resolvedAuthCache.set(cacheKey, resolved);
-    console.log(`Atlassian: classic auth OK for ${auth.domain}`);
-    return resolved;
-  }
-
-  if (cloudId) {
-    const scopedRes = await fetch(`https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/myself`, {
+  let useScoped = false;
+  if (!classicOk && cloudId) {
+    const scopedOk = await fetch(`https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/myself`, {
       headers: { Authorization: basicAuthHeader(auth), Accept: "application/json" },
-    }).catch(() => null);
-
-    if (scopedRes?.ok) {
-      const resolved: ResolvedAuth = { ...auth, cloudId, useScoped: true };
-      resolvedAuthCache.set(cacheKey, resolved);
-      console.log(`Atlassian: scoped auth OK for ${auth.domain} (cloudId: ${cloudId})`);
-      return resolved;
-    }
+    }).then((r) => r.ok).catch(() => false);
+    useScoped = scopedOk;
   }
 
-  const resolved: ResolvedAuth = { ...auth, cloudId, useScoped: false };
+  const resolved: ResolvedAuth = { ...auth, cloudId, useScoped };
   resolvedAuthCache.set(cacheKey, resolved);
+  console.log(`Atlassian auth: ${useScoped ? "scoped" : "classic"} for ${auth.domain}${cloudId ? ` (cloud: ${cloudId})` : ""}`);
   return resolved;
 }
 
-function jiraBase(auth: ResolvedAuth): string {
-  if (auth.useScoped && auth.cloudId) return `https://api.atlassian.com/ex/jira/${auth.cloudId}/rest/api/3`;
-  return `https://${auth.domain}.atlassian.net/rest/api/3`;
+function classicJiraBase(domain: string): string {
+  return `https://${domain}.atlassian.net/rest/api/3`;
+}
+
+function scopedJiraBase(cloudId: string): string {
+  return `https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3`;
+}
+
+function jiraBases(auth: ResolvedAuth): string[] {
+  const bases: string[] = [];
+  if (auth.useScoped && auth.cloudId) {
+    bases.push(scopedJiraBase(auth.cloudId));
+    bases.push(classicJiraBase(auth.domain));
+  } else {
+    bases.push(classicJiraBase(auth.domain));
+    if (auth.cloudId) bases.push(scopedJiraBase(auth.cloudId));
+  }
+  return bases;
 }
 
 function confluenceV2Base(auth: ResolvedAuth): string {
@@ -89,38 +88,58 @@ function confluenceV1Base(auth: ResolvedAuth): string {
 }
 
 function sanitizeErrorBody(text: string): string {
-  return text
-    .replace(/[A-Za-z0-9+/=]{20,}/g, "[REDACTED]")
-    .replace(/Bearer\s+\S+/gi, "Bearer [REDACTED]")
-    .replace(/Basic\s+\S+/gi, "Basic [REDACTED]")
-    .slice(0, 200);
+  return text.replace(/[A-Za-z0-9+/=]{20,}/g, "[REDACTED]").replace(/Bearer\s+\S+/gi, "Bearer [REDACTED]").replace(/Basic\s+\S+/gi, "Basic [REDACTED]").slice(0, 200);
 }
 
-async function atlFetch(url: string, auth: ResolvedAuth, method = "GET", body?: unknown): Promise<{ data: unknown; error: string | null }> {
+async function atlFetch(url: string, auth: ResolvedAuth, method = "GET", body?: unknown): Promise<{ data: unknown; error: string | null; status?: number }> {
   try {
     const opts: RequestInit = {
       method,
-      headers: {
-        Authorization: basicAuthHeader(auth),
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
+      headers: { Authorization: basicAuthHeader(auth), Accept: "application/json", "Content-Type": "application/json" },
     };
     if (body) opts.body = JSON.stringify(body);
     const res = await fetch(url, opts);
     if (!res.ok) {
-      const rawText = await res.text().catch(() => "");
-      const safeText = sanitizeErrorBody(rawText);
+      const raw = await res.text().catch(() => "");
       let hint = "";
       if (res.status === 401 || res.status === 403) hint = " — Check token permissions/scopes.";
       if (res.status === 410) hint = " — Endpoint deprecated.";
-      const msg = `${res.status} ${res.statusText}${hint}${safeText ? ` — ${safeText}` : ""}`;
-      return { data: null, error: msg };
+      return { data: null, error: `${res.status} ${res.statusText}${hint} — ${sanitizeErrorBody(raw)}`, status: res.status };
     }
-    return { data: await res.json(), error: null };
+    return { data: await res.json(), error: null, status: res.status };
   } catch (err) {
     return { data: null, error: err instanceof Error ? err.message : "Connection failed" };
   }
+}
+
+async function jiraSearchWithFallback(
+  auth: ResolvedAuth, jqlStr: string, pageSize: number, startAt: number, fields: string[]
+): Promise<{ data: unknown; error: string | null }> {
+  const bases = jiraBases(auth);
+
+  for (const base of bases) {
+    const { data, error, status } = await atlFetch(
+      `${base}/search/jql`, auth, "POST",
+      { jql: jqlStr, maxResults: pageSize, startAt, fields }
+    );
+    if (!error && data) return { data, error: null };
+    if (status !== 410 && status !== 404 && status !== 405) {
+      const { data: gd, error: ge, status: gs } = await atlFetch(
+        `${base}/search?jql=${encodeURIComponent(jqlStr)}&maxResults=${pageSize}&startAt=${startAt}&fields=${fields.join(",")}`, auth
+      );
+      if (!ge && gd) return { data: gd, error: null };
+      if (gs !== 410 && gs !== 404) return { data: null, error: ge };
+    }
+  }
+
+  for (const base of bases) {
+    const { data, error } = await atlFetch(
+      `${base}/search?jql=${encodeURIComponent(jqlStr)}&maxResults=${pageSize}&startAt=${startAt}&fields=${fields.join(",")}`, auth
+    );
+    if (!error && data) return { data, error: null };
+  }
+
+  return { data: null, error: "All Jira search endpoints returned errors. Check token scopes (read:jira-work)." };
 }
 
 function parseFilterList(filter: string | undefined): string[] {
@@ -133,57 +152,65 @@ function buildJiraJql(projectFilter: string | undefined): string {
   if (projects.length === 0) return "ORDER BY updated DESC";
   const quoted = projects.map((p) => {
     const upper = p.trim().toUpperCase();
-    if (/^[A-Z][A-Z0-9_]+$/.test(upper)) return upper;
-    return `"${p.trim().replace(/"/g, '\\"')}"`;
+    return /^[A-Z][A-Z0-9_]+$/.test(upper) ? upper : `"${p.trim().replace(/"/g, '\\"')}"`;
   });
   return `project IN (${quoted.join(", ")}) ORDER BY updated DESC`;
 }
 
 export async function getJiraProjects(
-  overrideDomain?: string, overrideEmail?: string, overrideToken?: string
+  d?: string, e?: string, t?: string
 ): Promise<{ key: string; name: string }[]> {
-  const rawAuth = getAuth(overrideDomain, overrideEmail, overrideToken);
+  const rawAuth = getAuth(d, e, t);
   if (!rawAuth) return [];
   const auth = await resolveAuth(rawAuth);
-  const { data, error } = await atlFetch(`${jiraBase(auth)}/project/search?maxResults=200&orderBy=name`, auth);
-  if (error || !data) return [];
-  const result = data as Record<string, unknown>;
-  const values = (result.values || result) as Record<string, unknown>[];
-  if (!Array.isArray(values)) return [];
-  return values.map((p) => ({ key: (p.key as string) || "", name: (p.name as string) || "" })).filter((p) => p.key);
+
+  for (const base of jiraBases(auth)) {
+    const { data } = await atlFetch(`${base}/project/search?maxResults=200&orderBy=name`, auth);
+    if (data) {
+      const result = data as Record<string, unknown>;
+      const values = (result.values || result) as Record<string, unknown>[];
+      if (Array.isArray(values)) {
+        const projects = values.map((p) => ({ key: (p.key as string) || "", name: (p.name as string) || "" })).filter((p) => p.key);
+        if (projects.length > 0) return projects;
+      }
+    }
+    const { data: d2 } = await atlFetch(`${base}/project?maxResults=200`, auth);
+    if (d2 && Array.isArray(d2)) {
+      return (d2 as Record<string, unknown>[]).map((p) => ({ key: (p.key as string) || "", name: (p.name as string) || "" })).filter((p) => p.key);
+    }
+  }
+  return [];
 }
 
 export async function getConfluenceSpaces(
-  overrideDomain?: string, overrideEmail?: string, overrideToken?: string
+  d?: string, e?: string, t?: string
 ): Promise<{ key: string; name: string }[]> {
-  const rawAuth = getAuth(overrideDomain, overrideEmail, overrideToken);
+  const rawAuth = getAuth(d, e, t);
   if (!rawAuth) return [];
   const auth = await resolveAuth(rawAuth);
 
-  const { data, error } = await atlFetch(`${confluenceV2Base(auth)}/spaces?limit=200&sort=name`, auth);
-  if (!error && data) {
-    const result = data as Record<string, unknown>;
-    const results = (result.results || []) as Record<string, unknown>[];
-    return results.map((s) => ({ key: (s.key as string) || "", name: (s.name as string) || "" })).filter((s) => s.key);
+  const { data } = await atlFetch(`${confluenceV2Base(auth)}/spaces?limit=200&sort=name`, auth);
+  if (data) {
+    const results = ((data as Record<string, unknown>).results || []) as Record<string, unknown>[];
+    const spaces = results.map((s) => ({ key: (s.key as string) || "", name: (s.name as string) || "" })).filter((s) => s.key);
+    if (spaces.length > 0) return spaces;
   }
 
-  const { data: v1Data } = await atlFetch(`${confluenceV1Base(auth)}/space?limit=200`, auth);
-  if (v1Data) {
-    const results = ((v1Data as Record<string, unknown>).results || []) as Record<string, unknown>[];
+  const { data: v1 } = await atlFetch(`${confluenceV1Base(auth)}/space?limit=200`, auth);
+  if (v1) {
+    const results = ((v1 as Record<string, unknown>).results || []) as Record<string, unknown>[];
     return results.map((s) => ({ key: (s.key as string) || "", name: (s.name as string) || "" })).filter((s) => s.key);
   }
-
   return [];
 }
 
 export async function getJiraIssues(
-  overrideDomain?: string, overrideEmail?: string, overrideToken?: string, projectFilter?: string
+  d?: string, e?: string, t?: string, projectFilter?: string
 ): Promise<{ data: JiraIssue[]; isDemo: boolean; error?: string }> {
-  const rawAuth = getAuth(overrideDomain, overrideEmail, overrideToken);
+  const rawAuth = getAuth(d, e, t);
   if (!rawAuth) return { data: [], isDemo: false };
 
   const auth = await resolveAuth(rawAuth);
-  const base = jiraBase(auth);
   const allIssues: JiraIssue[] = [];
   let startAt = 0;
   const jqlStr = buildJiraJql(projectFilter);
@@ -191,32 +218,18 @@ export async function getJiraIssues(
   const fields = ["summary", "description", "status", "issuetype", "priority", "assignee", "reporter", "labels", "created", "updated", "project", "resolution"];
 
   while (allIssues.length < MAX_RESULTS) {
-    let result: Record<string, unknown> | null = null;
+    const { data, error } = await jiraSearchWithFallback(auth, jqlStr, PAGE_SIZE, startAt, fields);
+    if (error) { lastError = error; break; }
+    if (!data) break;
 
-    const { data: postData, error: postError } = await atlFetch(
-      `${base}/search/jql`, auth, "POST",
-      { jql: jqlStr, maxResults: PAGE_SIZE, startAt, fields }
-    );
-    if (!postError && postData) {
-      result = postData as Record<string, unknown>;
-    } else {
-      const jql = encodeURIComponent(jqlStr);
-      const { data: getData, error: getError } = await atlFetch(
-        `${base}/search?jql=${jql}&maxResults=${PAGE_SIZE}&startAt=${startAt}&fields=${fields.join(",")}`, auth
-      );
-      if (getError) { lastError = getError; break; }
-      if (getData) result = getData as Record<string, unknown>;
-    }
-
-    if (!result) break;
+    const result = data as Record<string, unknown>;
     const issues = result.issues as Record<string, unknown>[];
     if (!issues || issues.length === 0) break;
 
     for (const issue of issues) {
       const f = (issue.fields || {}) as Record<string, unknown>;
       allIssues.push({
-        id: issue.id as string,
-        key: issue.key as string,
+        id: issue.id as string, key: issue.key as string,
         summary: (f.summary as string) || "",
         description: extractTextFromADF(f.description),
         status: ((f.status as Record<string, unknown>)?.name as string) || "Unknown",
@@ -225,8 +238,7 @@ export async function getJiraIssues(
         assignee: ((f.assignee as Record<string, unknown>)?.displayName as string) || "Unassigned",
         reporter: ((f.reporter as Record<string, unknown>)?.displayName as string) || "",
         labels: (f.labels as string[]) || [],
-        created: (f.created as string) || "",
-        updated: (f.updated as string) || "",
+        created: (f.created as string) || "", updated: (f.updated as string) || "",
         project: ((f.project as Record<string, unknown>)?.name as string) || ((f.project as Record<string, unknown>)?.key as string) || "",
         resolution: ((f.resolution as Record<string, unknown>)?.name as string) || "",
       });
@@ -237,14 +249,14 @@ export async function getJiraIssues(
     startAt += PAGE_SIZE;
   }
 
-  console.log(`Jira [${auth.useScoped ? "scoped" : "classic"}]: ${allIssues.length} issues${projectFilter ? ` (${projectFilter})` : ""}${lastError ? ` [err]` : ""}`);
+  console.log(`Jira: ${allIssues.length} issues${projectFilter ? ` (${projectFilter})` : ""}${lastError ? " [err]" : ""}`);
   return { data: allIssues, isDemo: false, error: lastError || undefined };
 }
 
 export async function getConfluencePages(
-  overrideDomain?: string, overrideEmail?: string, overrideToken?: string, spaceFilter?: string
+  d?: string, e?: string, t?: string, spaceFilter?: string
 ): Promise<{ data: ConfluencePage[]; isDemo: boolean; error?: string }> {
-  const rawAuth = getAuth(overrideDomain, overrideEmail, overrideToken);
+  const rawAuth = getAuth(d, e, t);
   if (!rawAuth) return { data: [], isDemo: false };
 
   const auth = await resolveAuth(rawAuth);
@@ -255,104 +267,67 @@ export async function getConfluencePages(
 
   let spaceIdMap: Record<string, string> = {};
   if (spaces.length > 0) {
-    const { data: spacesData } = await atlFetch(`${v2Base}/spaces?limit=200`, auth);
-    if (spacesData) {
-      const results = ((spacesData as Record<string, unknown>).results || []) as Record<string, unknown>[];
-      for (const s of results) {
+    const { data } = await atlFetch(`${v2Base}/spaces?limit=200`, auth);
+    if (data) {
+      for (const s of ((data as Record<string, unknown>).results || []) as Record<string, unknown>[]) {
         const key = ((s.key as string) || "").toUpperCase();
         const name = ((s.name as string) || "").toLowerCase();
         const id = String(s.id || "");
-        if (id) {
-          spaceIdMap[key] = id;
-          spaceIdMap[name] = id;
-        }
+        if (id) { spaceIdMap[key] = id; spaceIdMap[name] = id; }
       }
     }
   }
 
-  async function fetchV2Pages(spaceId?: string) {
+  async function fetchPages(spaceId?: string) {
     let cursor: string | null = null;
-    const spaceParam = spaceId ? `&space-id=${spaceId}` : "";
-    let page = 0;
-    while (allPages.length < 500 && page < 20) {
-      const cursorParam = cursor ? `&cursor=${encodeURIComponent(cursor)}` : "";
-      const { data, error } = await atlFetch(
-        `${v2Base}/pages?limit=50&sort=-modified-date${spaceParam}${cursorParam}&body-format=storage`,
-        auth
-      );
-      if (error) { lastError = error; return false; }
-      const result = data as Record<string, unknown>;
-      const results = (result.results || []) as Record<string, unknown>[];
+    const sp = spaceId ? `&space-id=${spaceId}` : "";
+    for (let page = 0; allPages.length < 500 && page < 20; page++) {
+      const cp = cursor ? `&cursor=${encodeURIComponent(cursor)}` : "";
+      const { data, error } = await atlFetch(`${v2Base}/pages?limit=50&sort=-modified-date${sp}${cp}&body-format=storage`, auth);
+      if (error) { lastError = error; return; }
+      const results = ((data as Record<string, unknown>)?.results || []) as Record<string, unknown>[];
       if (results.length === 0) break;
-
-      for (const p of results) {
-        const bodyObj = p.body as Record<string, unknown> | undefined;
-        const storageObj = bodyObj?.storage as Record<string, unknown> | undefined;
-        const rawBody = (storageObj?.value as string) || "";
-        const excerpt = rawBody.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 500);
-        const spaceRef = p.spaceId as string || "";
-        const version = p.version as Record<string, unknown> | undefined;
-
-        allPages.push({
-          id: String(p.id || ""),
-          title: (p.title as string) || "Untitled",
-          excerpt,
-          space: spaceRef,
-          lastModified: (version?.createdAt as string) || (p.createdAt as string) || "",
-          author: ((version?.authorId as string) || ""),
-          url: `https://${auth.domain}.atlassian.net/wiki${((p._links as Record<string, unknown>)?.webui as string) || ""}`,
-        });
-      }
-
-      const links = result._links as Record<string, unknown> | undefined;
-      const nextLink = links?.next as string | undefined;
-      if (nextLink) {
-        const match = nextLink.match(/cursor=([^&]+)/);
-        cursor = match ? decodeURIComponent(match[1]) : null;
-      } else {
-        break;
-      }
-      page++;
+      for (const p of results) addPage(allPages, p, auth.domain);
+      const next = ((data as Record<string, unknown>)?._links as Record<string, unknown>)?.next as string | undefined;
+      if (next) { const m = next.match(/cursor=([^&]+)/); cursor = m ? decodeURIComponent(m[1]) : null; }
+      else break;
     }
-    return true;
   }
 
   if (spaces.length > 0) {
     for (const space of spaces) {
-      const upper = space.toUpperCase();
-      const lower = space.toLowerCase();
-      const spaceId = spaceIdMap[upper] || spaceIdMap[lower];
-      if (spaceId) {
-        await fetchV2Pages(spaceId);
-      } else {
-        const ok = await fetchV2Pages();
-        if (ok && allPages.length > 0) {
-          const filtered = allPages.filter((p) =>
-            p.space.toUpperCase() === upper || p.space.toLowerCase() === lower
-          );
-          allPages.length = 0;
-          allPages.push(...filtered);
-        }
-      }
+      const id = spaceIdMap[space.toUpperCase()] || spaceIdMap[space.toLowerCase()];
+      if (id) await fetchPages(id);
+      else await fetchPages();
     }
   } else {
-    await fetchV2Pages();
+    await fetchPages();
   }
 
-  console.log(`Confluence [${auth.useScoped ? "scoped" : "classic"}]: ${allPages.length} pages${spaceFilter ? ` (${spaceFilter})` : ""}${lastError ? ` [err]` : ""}`);
+  console.log(`Confluence: ${allPages.length} pages${spaceFilter ? ` (${spaceFilter})` : ""}${lastError ? " [err]" : ""}`);
   return { data: allPages, isDemo: false, error: lastError || undefined };
 }
 
+function addPage(pages: ConfluencePage[], p: Record<string, unknown>, domain: string) {
+  const bodyVal = ((p.body as Record<string, unknown>)?.storage as Record<string, unknown>)?.value as string || "";
+  const excerpt = bodyVal.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 500);
+  const space = p.spaceId as string || "";
+  const version = p.version as Record<string, unknown> | undefined;
+  pages.push({
+    id: String(p.id || ""), title: (p.title as string) || "Untitled", excerpt, space,
+    lastModified: (version?.createdAt as string) || (p.createdAt as string) || "",
+    author: (version?.authorId as string) || "",
+    url: `https://${domain}.atlassian.net/wiki${((p._links as Record<string, unknown>)?.webui as string) || ""}`,
+  });
+}
+
 function extractTextFromADF(adf: unknown): string {
-  if (!adf) return "";
-  if (typeof adf === "string") return adf;
+  if (!adf || typeof adf === "string") return (adf as string) || "";
   if (typeof adf !== "object") return "";
   const node = adf as Record<string, unknown>;
   if (node.type === "text" && typeof node.text === "string") return node.text;
   let text = "";
-  if (Array.isArray(node.content)) {
-    for (const child of node.content) text += extractTextFromADF(child) + " ";
-  }
+  if (Array.isArray(node.content)) for (const c of node.content) text += extractTextFromADF(c) + " ";
   return text.trim();
 }
 

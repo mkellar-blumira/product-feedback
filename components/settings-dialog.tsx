@@ -49,6 +49,8 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   const [jiraProjects, setJiraProjects] = useState<AtlassianResource[]>([]);
   const [confluenceSpaces, setConfluenceSpaces] = useState<AtlassianResource[]>([]);
   const [loadingResources, setLoadingResources] = useState(false);
+  const [jiraSearch, setJiraSearch] = useState("");
+  const [confluenceSearch, setConfluenceSearch] = useState("");
 
   useEffect(() => {
     if (open) {
@@ -327,29 +329,32 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
               <div className="space-y-1.5">
                 <label className="text-[10px] text-muted-foreground font-medium">Jira Projects</label>
                 {jiraProjects.length > 0 ? (
-                  <div className="max-h-32 overflow-y-auto rounded-lg border border-border bg-card p-1.5 space-y-0.5">
-                    {jiraProjects.map((p) => {
-                      const selected = parseFilterList(fields.atlassianJiraFilter?.value).map((s) => s.toUpperCase()).includes(p.key.toUpperCase());
-                      return (
-                        <label key={p.key} className={cn("flex items-center gap-2 px-2 py-1 rounded text-xs cursor-pointer hover:bg-accent/50 transition-colors", selected && "bg-primary/10")}>
-                          <input type="checkbox" checked={selected} onChange={() => {
-                            const current = parseFilterList(fields.atlassianJiraFilter?.value);
-                            const upper = current.map((s) => s.toUpperCase());
-                            const next = selected
-                              ? current.filter((s) => s.toUpperCase() !== p.key.toUpperCase())
-                              : [...current, p.key];
-                            updateField("atlassianJiraFilter", { value: next.join(", "), dirty: true });
-                          }} className="rounded" />
-                          <span className="font-mono text-[10px] text-muted-foreground">{p.key}</span>
-                          <span className="truncate">{p.name}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
+                  <>
+                    <input type="text" value={jiraSearch} onChange={(e) => setJiraSearch(e.target.value)}
+                      placeholder="Search projects..." className="w-full px-2.5 py-1 rounded-md border border-border bg-card text-[10px] placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/20" />
+                    <div className="max-h-36 overflow-y-auto rounded-lg border border-border bg-card p-1.5 space-y-0.5">
+                      {jiraProjects
+                        .filter((p) => !jiraSearch || p.key.toLowerCase().includes(jiraSearch.toLowerCase()) || p.name.toLowerCase().includes(jiraSearch.toLowerCase()))
+                        .map((p) => {
+                          const selected = parseFilterList(fields.atlassianJiraFilter?.value).map((s) => s.toUpperCase()).includes(p.key.toUpperCase());
+                          return (
+                            <label key={p.key} className={cn("flex items-center gap-2 px-2 py-1 rounded text-xs cursor-pointer hover:bg-accent/50 transition-colors", selected && "bg-primary/10")}>
+                              <input type="checkbox" checked={selected} onChange={() => {
+                                const current = parseFilterList(fields.atlassianJiraFilter?.value);
+                                const next = selected ? current.filter((s) => s.toUpperCase() !== p.key.toUpperCase()) : [...current, p.key];
+                                updateField("atlassianJiraFilter", { value: next.join(", "), dirty: true });
+                              }} className="rounded" />
+                              <span className="font-mono text-[10px] text-muted-foreground w-12 flex-shrink-0">{p.key}</span>
+                              <span className="truncate">{p.name}</span>
+                            </label>
+                          );
+                        })}
+                    </div>
+                  </>
                 ) : (
                   <input type="text" value={fields.atlassianJiraFilter?.value || ""}
                     onChange={(e) => updateField("atlassianJiraFilter", { value: e.target.value, dirty: true })}
-                    placeholder="PROD, ENG, SUP (or connect to see projects)"
+                    placeholder="PROD, ENG, SUP (or Test Connection to see projects)"
                     className="w-full px-3 py-1.5 rounded-lg border border-border bg-card text-xs placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40" />
                 )}
                 <p className="text-[9px] text-muted-foreground">
@@ -360,28 +365,32 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
               <div className="space-y-1.5">
                 <label className="text-[10px] text-muted-foreground font-medium">Confluence Spaces</label>
                 {confluenceSpaces.length > 0 ? (
-                  <div className="max-h-32 overflow-y-auto rounded-lg border border-border bg-card p-1.5 space-y-0.5">
-                    {confluenceSpaces.map((s) => {
-                      const selected = parseFilterList(fields.atlassianConfluenceFilter?.value).map((f) => f.toUpperCase()).includes(s.key.toUpperCase());
-                      return (
-                        <label key={s.key} className={cn("flex items-center gap-2 px-2 py-1 rounded text-xs cursor-pointer hover:bg-accent/50 transition-colors", selected && "bg-primary/10")}>
-                          <input type="checkbox" checked={selected} onChange={() => {
-                            const current = parseFilterList(fields.atlassianConfluenceFilter?.value);
-                            const next = selected
-                              ? current.filter((f) => f.toUpperCase() !== s.key.toUpperCase())
-                              : [...current, s.key];
-                            updateField("atlassianConfluenceFilter", { value: next.join(", "), dirty: true });
-                          }} className="rounded" />
-                          <span className="font-mono text-[10px] text-muted-foreground">{s.key}</span>
-                          <span className="truncate">{s.name}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
+                  <>
+                    <input type="text" value={confluenceSearch} onChange={(e) => setConfluenceSearch(e.target.value)}
+                      placeholder="Search spaces..." className="w-full px-2.5 py-1 rounded-md border border-border bg-card text-[10px] placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/20" />
+                    <div className="max-h-36 overflow-y-auto rounded-lg border border-border bg-card p-1.5 space-y-0.5">
+                      {confluenceSpaces
+                        .filter((s) => !confluenceSearch || s.key.toLowerCase().includes(confluenceSearch.toLowerCase()) || s.name.toLowerCase().includes(confluenceSearch.toLowerCase()))
+                        .map((s) => {
+                          const selected = parseFilterList(fields.atlassianConfluenceFilter?.value).map((f) => f.toUpperCase()).includes(s.key.toUpperCase());
+                          return (
+                            <label key={s.key} className={cn("flex items-center gap-2 px-2 py-1 rounded text-xs cursor-pointer hover:bg-accent/50 transition-colors", selected && "bg-primary/10")}>
+                              <input type="checkbox" checked={selected} onChange={() => {
+                                const current = parseFilterList(fields.atlassianConfluenceFilter?.value);
+                                const next = selected ? current.filter((f) => f.toUpperCase() !== s.key.toUpperCase()) : [...current, s.key];
+                                updateField("atlassianConfluenceFilter", { value: next.join(", "), dirty: true });
+                              }} className="rounded" />
+                              <span className="font-mono text-[10px] text-muted-foreground w-12 flex-shrink-0">{s.key}</span>
+                              <span className="truncate">{s.name}</span>
+                            </label>
+                          );
+                        })}
+                    </div>
+                  </>
                 ) : (
                   <input type="text" value={fields.atlassianConfluenceFilter?.value || ""}
                     onChange={(e) => updateField("atlassianConfluenceFilter", { value: e.target.value, dirty: true })}
-                    placeholder="PROD, ENG, KB (or connect to see spaces)"
+                    placeholder="PROD, ENG, KB (or Test Connection to see spaces)"
                     className="w-full px-3 py-1.5 rounded-lg border border-border bg-card text-xs placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40" />
                 )}
                 <p className="text-[9px] text-muted-foreground">
