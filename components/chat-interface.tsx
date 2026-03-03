@@ -49,6 +49,55 @@ interface ChatInterfaceProps {
   className?: string;
 }
 
+function fixMarkdown(text: string): string {
+  const lines = text.split("\n");
+  const fixed: string[] = [];
+
+  for (const line of lines) {
+    if (!line.includes("|") || line.includes("\n")) {
+      fixed.push(line);
+      continue;
+    }
+
+    const sepMatch = line.match(/\|\s*---\s*\|/);
+    if (!sepMatch) {
+      fixed.push(line);
+      continue;
+    }
+
+    const parts = line.split("|").map((s) => s.trim());
+    const nonEmpty = parts.filter((s) => s !== "");
+    const sepCount = nonEmpty.filter((s) => /^-{1,}$/.test(s)).length;
+
+    if (sepCount < 2) {
+      fixed.push(line);
+      continue;
+    }
+
+    const colCount = sepCount;
+    const cells = nonEmpty;
+    const rows: string[] = [];
+
+    for (let i = 0; i < cells.length; i += colCount) {
+      const row = cells.slice(i, i + colCount);
+      if (row.length === colCount) {
+        rows.push(`| ${row.join(" | ")} |`);
+      } else if (row.length > 0) {
+        const padded = [...row, ...Array(colCount - row.length).fill("")];
+        rows.push(`| ${padded.join(" | ")} |`);
+      }
+    }
+
+    if (rows.length >= 3) {
+      fixed.push(rows.join("\n"));
+    } else {
+      fixed.push(line);
+    }
+  }
+
+  return fixed.join("\n");
+}
+
 export function ChatInterface({ className }: ChatInterfaceProps) {
   const { keys, keyHeaders, useDemoData, status, hasAnyKey } = useApiKeys();
 
@@ -218,7 +267,7 @@ Try one of the suggested queries below to get started.`,
                 )}
               >
                 <div className="prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-                  <ReactMarkdown>{msg.content}</ReactMarkdown>
+                  <ReactMarkdown>{fixMarkdown(msg.content)}</ReactMarkdown>
                 </div>
               </div>
               {msg.sources && msg.sources.length > 0 && (
