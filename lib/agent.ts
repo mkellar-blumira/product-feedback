@@ -69,6 +69,27 @@ function atlassianIssueUrl(issueKey: string, keys: AgentKeys): string | undefine
   return `https://${domain.replace(/\.atlassian\.net\/?$/, "")}.atlassian.net/browse/${issueKey}`;
 }
 
+function looksLikeOpaqueId(value: string): boolean {
+  const v = value.trim();
+  return (
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v) ||
+    /^productboard\s+note\s*-\s*[0-9a-f-]{20,}$/i.test(v)
+  );
+}
+
+function snippetFromContent(content: string, max = 80): string {
+  const normalized = content.replace(/\s+/g, " ").trim();
+  if (!normalized) return "Untitled note";
+  const firstSentence = normalized.split(/[.!?]/)[0]?.trim() || normalized;
+  return firstSentence.length > max ? `${firstSentence.slice(0, max - 1)}…` : firstSentence;
+}
+
+function cleanFeedbackTitle(fb: FeedbackItem): string {
+  const raw = (fb.title || "").replace(/\s+/g, " ").trim();
+  if (!raw || looksLikeOpaqueId(raw)) return snippetFromContent(fb.content);
+  return raw;
+}
+
 function feedbackContactRef(fb: FeedbackItem): string {
   const explicitEmail = fb.metadata?.userEmail || "";
   const customerLooksLikeEmail = /\S+@\S+/.test(fb.customer) ? fb.customer : "";
@@ -78,14 +99,16 @@ function feedbackContactRef(fb: FeedbackItem): string {
   if (email) return email;
   if (name) return name;
   if (fb.company) return fb.company;
-  return fb.id;
+  return "";
 }
 
 function feedbackSourceRef(fb: FeedbackItem): string {
-  const base = fb.source === "productboard" ? "Productboard note" : fb.source;
-  const contact = feedbackContactRef(fb);
+  const title = cleanFeedbackTitle(fb);
   const url = fb.metadata?.sourceUrl;
-  return url ? `${base} (${contact}, link: ${url})` : `${base} (${contact})`;
+  if (fb.source === "productboard") {
+    return url ? `Productboard note "${title}" (link: ${url})` : `Productboard note "${title}"`;
+  }
+  return fb.source;
 }
 
 function lookupDetails(ids: string[], data: AgentData, detailed = false, keys: AgentKeys = {}): string[] {
@@ -96,7 +119,8 @@ function lookupDetails(ids: string[], data: AgentData, detailed = false, keys: A
     const fb = data.feedback.find((f) => f.id === id);
     if (fb) {
       const w = shortDate(fb as unknown as Record<string, unknown>);
-      details.push(`[Source: ${feedbackSourceRef(fb)}, ${w}] "${fb.title}" — customer: ${feedbackContactRef(fb)}${fb.company ? ` @ ${fb.company}` : ""}: "${fb.content.slice(0, contentLen)}"`);
+      const contact = feedbackContactRef(fb);
+      details.push(`[Source: ${feedbackSourceRef(fb)}, ${w}] "${cleanFeedbackTitle(fb)}" — customer: ${contact || "unknown"}${fb.company ? ` @ ${fb.company}` : ""}: "${fb.content.slice(0, contentLen)}"`);
       continue;
     }
     const feat = data.features.find((f) => f.id === id);
@@ -589,7 +613,7 @@ export async function chat(
       const fb = data.feedback.find((f) => f.id === doc.id);
       const email = fb?.metadata?.userEmail || (fb?.customer && /\S+@\S+/.test(fb.customer) ? fb.customer : "");
       const contact = email || fb?.customer || fb?.company || "";
-      title = fb ? `${fb.title}${contact ? ` — ${contact}` : ""}` : title;
+      title = fb ? `${cleanFeedbackTitle(fb)}${contact ? ` — ${contact}` : ""}` : title;
       if (fb?.metadata?.sourceUrl) url = fb.metadata.sourceUrl;
     } else if (doc.type === "feature") {
       title = data.features.find((f) => f.id === doc.id)?.name || title;
@@ -648,11 +672,11 @@ USE THIS EXACT FORMAT:
 
 [1-2 paragraphs. What's new, what changed, what matters. Reference dates.]
 
-> "[direct customer quote if available]" — Customer Name or Email (Source: [Jira CX-123](link) or [Productboard note - customer/email](link if available))
+> "[direct customer quote if available]" — Customer Name or Email. Source: [Jira CX-123](link) or [Productboard note title](link if available)
 
 | Source | What | When |
 | --- | --- | --- |
-[max 5 rows. Source must be specific and searchable: include Jira key (prefer link) or Productboard customer/email and link when available. Never use generic "Productboard" alone. What = the actual request/issue. When = relative date.]
+[max 5 rows. Source must be specific and searchable: include Jira key (prefer link) or Productboard note title (plus link when available). Put customer/email in the quote attribution, not duplicated in Source. Never use generic "Productboard" alone. What = the actual request/issue. When = relative date.]
 
 ## Next Steps
 
@@ -660,7 +684,7 @@ USE THIS EXACT FORMAT:
 2. [owner] [action] [by when]
 3. [owner] [action] [by when]
 
-CONSTRAINTS: 300 words max. No :--- in tables. No multi-sentence action items. Every quote MUST include a specific, searchable source (Jira key, customer name, or customer email). Never show an unattributed quote. Do not cite Zapier/portal as the source identity; cite the actual customer identity from the note. When the question asks for specific feedback or ticket details, show the actual content. For "how many"/count questions, start with the numeric count and only say "no data" if there are zero matching items in context. Skip the quote section if none available.`;
+CONSTRAINTS: 300 words max. No :--- in tables. No multi-sentence action items. Every quote MUST include a specific, searchable source. Never show an unattributed quote. Do not cite Zapier/portal as the source identity; cite the actual customer identity from the note. Do not duplicate the same name/email in both quote attribution and Source field. When the question asks for specific feedback or ticket details, show the actual content. For "how many"/count questions, start with the numeric count and only say "no data" if there are zero matching items in context. Skip the quote section if none available.`;
 
   const inputTokens = estimateTokens(SYSTEM_PROMPT) + estimateTokens(prompt);
 
