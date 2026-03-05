@@ -103,7 +103,7 @@ function lookupDetails(ids: string[], data: AgentData, detailed = false): string
   return details;
 }
 
-const SYSTEM_PROMPT = `You are a concise product intelligence analyst. Synthesize data into brief, actionable insights. Focus on recent changes. Be opinionated. Include direct customer quotes when available.
+const SYSTEM_PROMPT = `You are a concise product intelligence analyst. Synthesize data into brief, actionable insights. Focus on recent changes unless the user asks for historical totals/counts. Be opinionated. Include direct customer quotes when available.
 
 DATA SOURCE RULES:
 - Productboard notes/features = CUSTOMER FEEDBACK. This is the primary voice-of-customer source. Prioritize this.
@@ -111,11 +111,14 @@ DATA SOURCE RULES:
 - Jira ENG tickets (ENG- prefix) = ENGINEERING/internal work. These are implementation details, not customer feedback. Reference only when the user asks about engineering status or what's being built.
 - Confluence pages = INTERNAL DOCUMENTATION. Only reference when the user specifically asks about docs, guides, or internal processes. Don't include in general feedback summaries.
 - Feedback arrives in Productboard through pipelines (Zapier, email, CRM). Zapier/email is the delivery mechanism, NOT the subject. Read the actual TITLE and CONTENT to understand what the customer wants.
-- Source is shown in brackets like [Source: productboard] or [Jira CX-1234]. A note titled "Integration Request (Salesforce)" = customer wants Salesforce integration, NOT feedback about Salesforce as a tool.`;
+- Source is shown in brackets like [Source: productboard] or [Jira CX-1234]. A note titled "Integration Request (Salesforce)" = customer wants Salesforce integration, NOT feedback about Salesforce as a tool.
+- If the user asks for a number/count/how many, prioritize numeric accuracy over recency and compute from matching items in the provided context.`;
 
 const BROAD_KEYWORDS = ["summary", "overview", "brief", "executive", "all", "comprehensive", "status", "what's happening", "state of", "pulse", "report"];
 const CONFLUENCE_KEYWORDS = ["confluence", "docs", "documentation", "guide", "wiki", "internal doc", "runbook", "playbook", "process"];
 const ENG_KEYWORDS = ["engineering", "eng ticket", "eng-", "development", "sprint", "what's being built", "implementation", "technical"];
+const COUNT_KEYWORDS = ["how many", "number of", "count", "total", "how much"];
+const FOLLOW_UP_KEYWORDS = ["both", "either", "them", "those", "that", "these", "it", "same"];
 
 function isBroadQuery(query: string): boolean {
   const q = query.toLowerCase();
@@ -130,6 +133,45 @@ function wantsConfluence(query: string): boolean {
 function wantsEngineering(query: string): boolean {
   const q = query.toLowerCase();
   return ENG_KEYWORDS.some((kw) => q.includes(kw));
+}
+
+function wantsCount(query: string): boolean {
+  const q = query.toLowerCase();
+  return COUNT_KEYWORDS.some((kw) => q.includes(kw));
+}
+
+function isLikelyFollowUp(query: string): boolean {
+  const q = query.toLowerCase();
+  const hasFollowUpWord = FOLLOW_UP_KEYWORDS.some((kw) => q.includes(kw));
+  const startsWithContinuation = /^(and|also|what about|how about|those|them|it)\b/.test(q.trim());
+  return hasFollowUpWord || startsWithContinuation;
+}
+
+function buildSearchQueries(
+  userMessage: string,
+  conversationHistory: { role: "user" | "assistant"; content: string }[],
+  includeHistory: boolean
+): string[] {
+  const queries = [userMessage.trim()];
+  if (!includeHistory) return queries;
+
+  const priorUserTurns = conversationHistory
+    .filter((m) => m.role === "user")
+    .map((m) => m.content.trim())
+    .filter(Boolean);
+
+  const lastUserTurn = priorUserTurns[priorUserTurns.length - 1];
+  if (!lastUserTurn) return queries;
+
+  if (isLikelyFollowUp(userMessage)) {
+    queries.push(`${lastUserTurn}\n${userMessage}`);
+  }
+
+  if (wantsCount(userMessage)) {
+    queries.push(lastUserTurn);
+  }
+
+  return Array.from(new Set(queries.map((q) => q.toLowerCase())));
 }
 
 function recentItems<T extends { date?: string; created?: string; updated?: string }>(items: T[], limit: number): T[] {
@@ -369,8 +411,22 @@ export async function chat(
   contextMode: ContextMode = "focused"
 ): Promise<ChatResult> {
   const store = buildStore(data);
-  const searchLimit = contextMode === "focused" ? 10 : contextMode === "standard" ? 15 : 20;
-  const rawResults = store.search(userMessage, { limit: searchLimit });
+  const countQuery = wantsCount(userMessage);
+  const baseSearchLimit = contextMode === "focused" ? 10 : contextMode === "standard" ? 15 : 20;
+  const searchLimit = countQuery ? Math.max(baseSearchLimit * 3, 30) : baseSearchLimit;
+  const searchQueries = buildSearchQueries(userMessage, conversationHistory, countQuery || isLikelyFollowUp(userMessage));
+
+  const merged = new Map<string, { document: (ReturnType<InMemoryVectorStore["search"]>[number])["document"]; score: number }>();
+  for (const q of searchQueries) {
+    for (const r of store.search(q, { limit: searchLimit })) {
+      const key = `${r.document.type}:${r.document.id}`;
+      const existing = merged.get(key);
+      if (!existing || r.score > existing.score) merged.set(key, r);
+    }
+  }
+  const rawResults = Array.from(merged.values())
+    .sort((a, b) => b.score - a.score)
+    .slice(0, searchLimit);
 
   const includeConfluence = wantsConfluence(userMessage);
   const includeEng = wantsEngineering(userMessage);
@@ -421,7 +477,12 @@ export async function chat(
 
   const searchContext = searchParts.join("\n");
 
-  const effectiveMode = isBroadQuery(userMessage) && contextMode === "focused" ? "standard" : contextMode;
+  const effectiveMode =
+    countQuery && contextMode === "focused"
+      ? "deep"
+      : isBroadQuery(userMessage) && contextMode === "focused"
+        ? "standard"
+        : contextMode;
 
   let context: string;
   switch (effectiveMode) {
@@ -461,7 +522,7 @@ USE THIS EXACT FORMAT:
 2. [owner] [action] [by when]
 3. [owner] [action] [by when]
 
-CONSTRAINTS: 300 words max. No :--- in tables. No multi-sentence action items. Every quote MUST include its source (ticket ID, Productboard note title, or customer name). Never show an unattributed quote. When the question asks for specific feedback or ticket details, show the actual content. Skip the quote section if none available.`;
+CONSTRAINTS: 300 words max. No :--- in tables. No multi-sentence action items. Every quote MUST include its source (ticket ID, Productboard note title, or customer name). Never show an unattributed quote. When the question asks for specific feedback or ticket details, show the actual content. For "how many"/count questions, start with the numeric count and only say "no data" if there are zero matching items in context. Skip the quote section if none available.`;
 
   const inputTokens = estimateTokens(SYSTEM_PROMPT) + estimateTokens(prompt);
 

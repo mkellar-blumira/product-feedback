@@ -70,6 +70,43 @@ function fixMarkdown(text: string): string {
     }
   }
 
+  const isPipeRow = (line: string) => {
+    const trimmed = line.trim();
+    return (
+      trimmed.startsWith("|") &&
+      trimmed.endsWith("|") &&
+      trimmed.split("|").length - 2 >= 2
+    );
+  };
+
+  const isSeparatorRow = (line: string) => {
+    const trimmed = line.trim();
+    return /^\|\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|$/.test(trimmed);
+  };
+
+  const columnCount = (line: string) =>
+    Math.max(0, line.trim().split("|").length - 2);
+
+  const lines = result.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    if (!isPipeRow(lines[i])) continue;
+    if (i > 0 && isPipeRow(lines[i - 1])) continue; // only inspect start of each table block
+
+    let j = i;
+    while (j < lines.length && isPipeRow(lines[j])) j++;
+
+    const blockSize = j - i;
+    if (blockSize < 2) continue;
+    if (isSeparatorRow(lines[i + 1])) continue;
+
+    const cols = columnCount(lines[i]);
+    if (cols < 2) continue;
+    lines.splice(i + 1, 0, `| ${Array.from({ length: cols }, () => "---").join(" | ")} |`);
+    i++; // skip inserted separator
+  }
+
+  result = lines.join("\n");
+
   return result;
 }
 
