@@ -213,6 +213,13 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
             </div>
           </div>
 
+          <div className="p-3 rounded-xl bg-muted/30 border border-border">
+            <p className="text-xs font-medium">Local key storage</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              Saved API keys are stored in encrypted browser storage when supported. Older plaintext local storage entries are migrated automatically.
+            </p>
+          </div>
+
           <div className="p-3 rounded-xl bg-muted/50 border border-border space-y-2">
             <p className="text-xs font-medium">AI Context Mode</p>
             <p className="text-[10px] text-muted-foreground">Controls how much data is sent to Gemini per query. Less = cheaper + faster.</p>

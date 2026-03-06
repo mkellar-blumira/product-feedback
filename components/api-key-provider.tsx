@@ -46,9 +46,16 @@ export function ApiKeyProvider({ children }: { children: ReactNode }) {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    const stored = loadKeys();
-    setKeys(stored);
-    setLoaded(true);
+    let cancelled = false;
+    void (async () => {
+      const stored = await loadKeys();
+      if (cancelled) return;
+      setKeys(stored);
+      setLoaded(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const refreshStatus = useCallback(async (overrideKeys?: Partial<ApiKeyState>) => {
@@ -69,7 +76,7 @@ export function ApiKeyProvider({ children }: { children: ReactNode }) {
   const setKey = useCallback((name: keyof ApiKeyState, value: string) => {
     setKeys((prev) => {
       const next = { ...prev, [name]: value };
-      saveKeys(next);
+      void saveKeys(next);
       return next;
     });
   }, []);
@@ -77,14 +84,14 @@ export function ApiKeyProvider({ children }: { children: ReactNode }) {
   const removeKey = useCallback((name: keyof ApiKeyState) => {
     setKeys((prev) => {
       const next = { ...prev, [name]: "" };
-      saveKeys(next);
+      void saveKeys(next);
       return next;
     });
   }, []);
 
   const clearAllKeysHandler = useCallback(() => {
     setKeys({ ...EMPTY });
-    clearKeys();
+    void clearKeys();
   }, []);
 
   const keyHeaders = buildKeyHeaders(keys);
