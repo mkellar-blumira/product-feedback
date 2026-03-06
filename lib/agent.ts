@@ -1,5 +1,6 @@
 import { InMemoryVectorStore } from "./vector-store";
 import { generateWithGemini, isGeminiConfigured } from "./gemini";
+import { getRelevantPendoContext, PendoUsageOverview } from "./pendo";
 import {
   DEMO_FEEDBACK, DEMO_PRODUCTBOARD_FEATURES, DEMO_ATTENTION_CALLS, DEMO_INSIGHTS,
 } from "./demo-data";
@@ -12,6 +13,7 @@ export interface AgentKeys {
   geminiKey?: string;
   productboardKey?: string;
   attentionKey?: string;
+  pendoKey?: string;
   atlassianDomain?: string;
   atlassianEmail?: string;
   atlassianToken?: string;
@@ -24,6 +26,7 @@ export interface AgentData {
   insights: Insight[];
   jiraIssues: JiraIssue[];
   confluencePages: ConfluencePage[];
+  pendoOverview: PendoUsageOverview | null;
 }
 
 export interface ChatResult {
@@ -52,7 +55,7 @@ export function getDemoData(): AgentData {
   return {
     feedback: DEMO_FEEDBACK, features: DEMO_PRODUCTBOARD_FEATURES,
     calls: DEMO_ATTENTION_CALLS, insights: DEMO_INSIGHTS,
-    jiraIssues: [], confluencePages: [],
+    jiraIssues: [], confluencePages: [], pendoOverview: null,
   };
 }
 
@@ -160,6 +163,7 @@ DATA SOURCE RULES:
 - Jira CX tickets (CX- prefix) = CUSTOMER SUCCESS issues. These reflect real customer problems. Prioritize these alongside Productboard.
 - Jira ENG tickets (ENG- prefix) = ENGINEERING/internal work. These are implementation details, not customer feedback. Reference only when the user asks about engineering status or what's being built.
 - Confluence pages = INTERNAL DOCUMENTATION. Only reference when the user specifically asks about docs, guides, or internal processes. Don't include in general feedback summaries.
+- Pendo = PRODUCT USAGE ANALYTICS. Use it to explain what users/accounts are doing in the product or how engaged they appear, but don't treat usage alone as proof of customer intent.
 - Feedback arrives in Productboard through pipelines (Zapier, email, CRM). Zapier/email is the delivery mechanism, NOT the subject. Read the actual TITLE and CONTENT to understand what the customer wants.
 - Source is shown in brackets like [Source: productboard] or [Jira CX-1234]. A note titled "Integration Request (Salesforce)" = customer wants Salesforce integration, NOT feedback about Salesforce as a tool.
 - Prefer source citations that are directly actionable: Jira key/link, Productboard note link, and customer name/email from the note.
@@ -171,6 +175,7 @@ const ENG_KEYWORDS = ["engineering", "eng ticket", "eng-", "development", "sprin
 const COUNT_KEYWORDS = ["how many", "number of", "count", "total", "how much"];
 const FOLLOW_UP_KEYWORDS = ["both", "either", "them", "those", "that", "these", "it", "same"];
 const INSIGHT_DRILLDOWN_KEYWORDS = ["tell me more about", "tell me more", "deep dive", "drill down", "more detail", "more context"];
+const PENDO_KEYWORDS = ["pendo", "usage", "activity", "history", "adoption", "behavior", "journey", "what are they doing", "what is this user doing", "what's this user doing", "engagement", "visited", "using the product"];
 
 function isBroadQuery(query: string): boolean {
   const q = query.toLowerCase();
@@ -195,6 +200,12 @@ function wantsCount(query: string): boolean {
 function wantsInsightDrilldown(query: string): boolean {
   const q = query.toLowerCase();
   return INSIGHT_DRILLDOWN_KEYWORDS.some((kw) => q.includes(kw));
+}
+
+function wantsPendoContext(query: string): boolean {
+  const q = query.toLowerCase();
+  if (q.includes("pendo")) return true;
+  return PENDO_KEYWORDS.some((kw) => q.includes(kw));
 }
 
 function isLikelyFollowUp(query: string): boolean {
@@ -416,7 +427,7 @@ function topThemesRecent(feedback: FeedbackItem[], days: number): string {
 }
 
 function buildStatsHeader(data: AgentData): string {
-  const { feedback, features, calls, insights, jiraIssues, confluencePages } = data;
+  const { feedback, features, calls, insights, jiraIssues, confluencePages, pendoOverview } = data;
   const parts: string[] = [];
 
   parts.push(`Today: ${new Date().toLocaleDateString()}`);
@@ -438,6 +449,13 @@ function buildStatsHeader(data: AgentData): string {
   if (calls.length > 0) parts.push(temporalSummary(calls as unknown as Record<string, unknown>[], "Calls"));
   if (confluencePages.length > 0) parts.push(`Confluence: ${confluencePages.length} pages`);
   if (insights.length > 0) parts.push(`Insights: ${insights.length}`);
+  if (pendoOverview) {
+    const pageHotspots = pendoOverview.activePages.slice(0, 3).map((p) => `${p.name} (${p.totalEvents})`).join(", ");
+    const featureHotspots = pendoOverview.activeFeatures.slice(0, 3).map((f) => `${f.name} (${f.totalEvents})`).join(", ");
+    parts.push(`Pendo: ${pendoOverview.totalPages} tagged pages, ${pendoOverview.totalFeatures} tagged features.`);
+    if (pageHotspots) parts.push(`Pendo top pages (last 7d): ${pageHotspots}`);
+    if (featureHotspots) parts.push(`Pendo top features (last 7d): ${featureHotspots}`);
+  }
 
   const recentThemes = topThemesRecent(feedback, 14);
   if (recentThemes) parts.push(recentThemes);
@@ -598,6 +616,15 @@ export async function chat(
     return true;
   });
 
+  const relatedFeedback = results
+    .filter((r) => r.document.type === "feedback")
+    .map((r) => data.feedback.find((f) => f.id === r.document.id))
+    .filter((item): item is FeedbackItem => !!item);
+
+  const pendoLookup = wantsPendoContext(userMessage)
+    ? await getRelevantPendoContext(userMessage, relatedFeedback, keys.pendoKey)
+    : null;
+
   const sources: { type: string; id: string; title: string; url?: string }[] = [];
   const searchParts: string[] = [];
   const detailed = wantsDetail(userMessage) || drilldownQuery;
@@ -635,9 +662,15 @@ export async function chat(
     sources.push({ type: doc.type, id: doc.id, title, url });
   }
 
+  if (pendoLookup?.sources.length) {
+    for (const source of pendoLookup.sources) {
+      sources.push(source);
+    }
+  }
+
   const matchedInsightIds = results.filter((r) => r.document.type === "insight").map((r) => r.document.id);
   const drilldownContext = buildInsightDrilldownContext(userMessage, data, matchedInsightIds, keys);
-  const searchContext = [searchParts.join("\n"), drilldownContext].filter(Boolean).join("\n");
+  const searchContext = [searchParts.join("\n"), drilldownContext, pendoLookup?.context || ""].filter(Boolean).join("\n");
 
   const effectiveMode =
     (countQuery || drilldownQuery) && contextMode === "focused"
@@ -653,7 +686,7 @@ export async function chat(
     default: context = buildFocusedContext(data, searchContext);
   }
 
-  const total = data.feedback.length + data.features.length + data.calls.length + data.insights.length + data.jiraIssues.length + data.confluencePages.length;
+  const total = data.feedback.length + data.features.length + data.calls.length + data.insights.length + data.jiraIssues.length + data.confluencePages.length + (data.pendoOverview ? data.pendoOverview.totalPages + data.pendoOverview.totalFeatures : 0);
 
   const historyText = conversationHistory
     .slice(-3)
@@ -716,7 +749,7 @@ function generateBuiltInResponse(
   query: string, context: string,
   sources: { type: string; id: string; title: string }[], data: AgentData
 ): string {
-  const total = data.feedback.length + data.features.length + data.calls.length + data.insights.length + data.jiraIssues.length + data.confluencePages.length;
+  const total = data.feedback.length + data.features.length + data.calls.length + data.insights.length + data.jiraIssues.length + data.confluencePages.length + (data.pendoOverview ? data.pendoOverview.totalPages + data.pendoOverview.totalFeatures : 0);
   const rows = sources.slice(0, 8).map((s) => `| ${s.type} | ${s.title} |`).join("\n");
 
   return `**Found ${sources.length} relevant items across ${total} total.**

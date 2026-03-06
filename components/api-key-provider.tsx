@@ -25,7 +25,7 @@ export function useApiKeys(): ApiKeyContextValue {
 }
 
 const EMPTY: ApiKeyState = {
-  geminiKey: "", productboardKey: "", attentionKey: "",
+  geminiKey: "", productboardKey: "", attentionKey: "", pendoKey: "",
   atlassianDomain: "", atlassianEmail: "", atlassianToken: "",
   atlassianJiraFilter: "", atlassianConfluenceFilter: "",
   contextMode: "focused",
@@ -35,6 +35,7 @@ const EMPTY_STATUS: ApiKeyStatus = {
   geminiKey: { configured: false, source: null },
   productboardKey: { configured: false, source: null },
   attentionKey: { configured: false, source: null },
+  pendoKey: { configured: false, source: null },
   atlassianKey: { configured: false, source: null },
 };
 
@@ -86,7 +87,7 @@ export function ApiKeyProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const keyHeaders = buildKeyHeaders(keys);
-  const hasAnyKey = !!(keys.geminiKey || keys.productboardKey || keys.attentionKey || keys.atlassianToken);
+  const hasAnyKey = !!(keys.geminiKey || keys.productboardKey || keys.attentionKey || keys.pendoKey || keys.atlassianToken);
 
   return (
     <ApiKeyContext.Provider

@@ -1,4 +1,4 @@
-export type FeedbackSource = "productboard" | "attention" | "zendesk" | "slack" | "intercom" | "jira" | "confluence" | "manual";
+export type FeedbackSource = "productboard" | "attention" | "pendo" | "zendesk" | "slack" | "intercom" | "jira" | "confluence" | "manual";
 export type Sentiment = "positive" | "negative" | "neutral" | "mixed";
 export type Priority = "critical" | "high" | "medium" | "low";
 export type InsightType = "trend" | "theme" | "anomaly" | "recommendation" | "risk";

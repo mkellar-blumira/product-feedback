@@ -20,6 +20,7 @@ const SIMPLE_KEYS: { id: keyof ApiKeyState; label: string; placeholder: string; 
   { id: "geminiKey", label: "Gemini API Key", placeholder: "AIza...", description: "Powers AI analysis. Get one at ai.google.dev" },
   { id: "productboardKey", label: "Productboard API Token", placeholder: "pb_...", description: "Fetches features and notes from Productboard" },
   { id: "attentionKey", label: "Attention API Key", placeholder: "att_...", description: "Fetches call recordings from Attention" },
+  { id: "pendoKey", label: "Pendo Integration Key", placeholder: "pendo_...", description: "Adds product usage insights and on-demand visitor/account history from Pendo" },
 ];
 
 const ATLASSIAN_AUTH_FIELDS: { id: keyof ApiKeyState; label: string; placeholder: string; type: string }[] = [

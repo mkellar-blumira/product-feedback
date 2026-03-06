@@ -2,6 +2,7 @@ import { AgentData, getDemoData } from "./agent";
 import { getFeatures, getNotes, isProductboardConfigured } from "./productboard";
 import { getCalls, isAttentionConfigured } from "./attention";
 import { getJiraIssues, getConfluencePages, isAtlassianConfigured } from "./atlassian";
+import { getPendoOverview, isPendoConfigured } from "./pendo";
 import {
   DEMO_FEEDBACK,
   DEMO_PRODUCTBOARD_FEATURES,
@@ -20,17 +21,19 @@ const CACHE_TTL_MS = 5 * 60 * 1000;
 function cacheKey(
   pbKey: string | undefined,
   attKey: string | undefined,
+  pendoKey: string | undefined,
   atlDomain: string | undefined,
   demo: boolean,
   atlJiraFilter?: string,
   atlConfluenceFilter?: string
 ): string {
-  return `${pbKey ? "pb" : ""}:${attKey ? "att" : ""}:${atlDomain ? "atl" : ""}:${demo}:${atlJiraFilter || ""}:${atlConfluenceFilter || ""}`;
+  return `${pbKey ? "pb" : ""}:${attKey ? "att" : ""}:${pendoKey ? "pendo" : ""}:${atlDomain ? "atl" : ""}:${demo}:${atlJiraFilter || ""}:${atlConfluenceFilter || ""}`;
 }
 
 async function fetchLiveData(
   pbKey: string | undefined,
   attKey: string | undefined,
+  pendoKey: string | undefined,
   atlDomain: string | undefined,
   atlEmail: string | undefined,
   atlToken: string | undefined,
@@ -44,6 +47,7 @@ async function fetchLiveData(
   const insights = useDemoFallback ? [...DEMO_INSIGHTS] : [];
   let jiraIssues: AgentData["jiraIssues"] = [];
   let confluencePages: AgentData["confluencePages"] = [];
+  let pendoOverview: AgentData["pendoOverview"] = null;
 
   const fetches: Promise<void>[] = [];
 
@@ -73,6 +77,15 @@ async function fetchLiveData(
     );
   }
 
+  if (isPendoConfigured(pendoKey)) {
+    fetches.push(
+      (async () => {
+        const overview = await getPendoOverview(pendoKey);
+        if (overview) pendoOverview = overview;
+      })()
+    );
+  }
+
   if (isAtlassianConfigured(atlDomain, atlEmail, atlToken)) {
     fetches.push(
       (async () => {
@@ -88,12 +101,13 @@ async function fetchLiveData(
 
   if (fetches.length > 0) await Promise.allSettled(fetches);
 
-  return { feedback, features, calls, insights, jiraIssues, confluencePages };
+  return { feedback, features, calls, insights, jiraIssues, confluencePages, pendoOverview };
 }
 
 export async function getData(
   pbKey: string | undefined,
   attKey: string | undefined,
+  pendoKey: string | undefined,
   useDemoData: boolean,
   atlDomain?: string,
   atlEmail?: string,
@@ -103,23 +117,24 @@ export async function getData(
 ): Promise<AgentData> {
   const hasPb = isProductboardConfigured(pbKey);
   const hasAtt = isAttentionConfigured(attKey);
+  const hasPendo = isPendoConfigured(pendoKey);
   const hasAtl = isAtlassianConfigured(atlDomain, atlEmail, atlToken);
-  const hasAnyLiveKey = hasPb || hasAtt || hasAtl;
+  const hasAnyLiveKey = hasPb || hasAtt || hasPendo || hasAtl;
 
   if (!hasAnyLiveKey && useDemoData) return getDemoData();
   if (!hasAnyLiveKey && !useDemoData) {
-    return { feedback: [], features: [], calls: [], insights: [], jiraIssues: [], confluencePages: [] };
+    return { feedback: [], features: [], calls: [], insights: [], jiraIssues: [], confluencePages: [], pendoOverview: null };
   }
 
-  const key = cacheKey(pbKey, attKey, atlDomain, useDemoData, atlJiraFilter, atlConfluenceFilter);
+  const key = cacheKey(pbKey, attKey, pendoKey, atlDomain, useDemoData, atlJiraFilter, atlConfluenceFilter);
   const cached = dataCache.get(key);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) return cached.data;
 
-  const data = await fetchLiveData(pbKey, attKey, atlDomain, atlEmail, atlToken, useDemoData, atlJiraFilter, atlConfluenceFilter);
+  const data = await fetchLiveData(pbKey, attKey, pendoKey, atlDomain, atlEmail, atlToken, useDemoData, atlJiraFilter, atlConfluenceFilter);
   dataCache.set(key, { data, timestamp: Date.now() });
 
   const total = data.feedback.length + data.features.length + data.calls.length + data.insights.length + data.jiraIssues.length + data.confluencePages.length;
-  console.log(`Data loaded: ${total} items (${data.feedback.length} feedback, ${data.features.length} features, ${data.calls.length} calls, ${data.jiraIssues.length} jira, ${data.confluencePages.length} confluence, ${data.insights.length} insights)`);
+  console.log(`Data loaded: ${total} items (${data.feedback.length} feedback, ${data.features.length} features, ${data.calls.length} calls, ${data.jiraIssues.length} jira, ${data.confluencePages.length} confluence, ${data.insights.length} insights${data.pendoOverview ? ", pendo overview" : ""})`);
 
   return data;
 }
