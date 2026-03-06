@@ -17,13 +17,14 @@ export async function POST(req: NextRequest) {
       geminiKey: req.headers.get("x-gemini-key") || undefined,
       productboardKey: req.headers.get("x-productboard-key") || undefined,
       attentionKey: req.headers.get("x-attention-key") || undefined,
+      pendoKey: req.headers.get("x-pendo-integration-key") || undefined,
       atlassianDomain: req.headers.get("x-atlassian-domain") || undefined,
       atlassianEmail: req.headers.get("x-atlassian-email") || undefined,
       atlassianToken: req.headers.get("x-atlassian-token") || undefined,
     };
 
     const data = await getData(
-      keys.productboardKey, keys.attentionKey, useDemoData !== false,
+      keys.productboardKey, keys.attentionKey, keys.pendoKey, useDemoData !== false,
       keys.atlassianDomain, keys.atlassianEmail, keys.atlassianToken,
       req.headers.get("x-atlassian-jira-filter") || undefined,
       req.headers.get("x-atlassian-confluence-filter") || undefined

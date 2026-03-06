@@ -4,6 +4,7 @@ export interface ApiKeyState {
   geminiKey: string;
   productboardKey: string;
   attentionKey: string;
+  pendoKey: string;
   atlassianDomain: string;
   atlassianEmail: string;
   atlassianToken: string;
@@ -16,6 +17,7 @@ export interface ApiKeyStatus {
   geminiKey: { configured: boolean; source: "app" | "env" | null };
   productboardKey: { configured: boolean; source: "app" | "env" | null };
   attentionKey: { configured: boolean; source: "app" | "env" | null };
+  pendoKey: { configured: boolean; source: "app" | "env" | null };
   atlassianKey: { configured: boolean; source: "app" | "env" | null };
 }
 
@@ -25,6 +27,7 @@ const EMPTY_KEYS: ApiKeyState = {
   geminiKey: "",
   productboardKey: "",
   attentionKey: "",
+  pendoKey: "",
   atlassianDomain: "",
   atlassianEmail: "",
   atlassianToken: "",
@@ -43,6 +46,7 @@ export function loadKeys(): ApiKeyState {
       geminiKey: parsed.geminiKey || "",
       productboardKey: parsed.productboardKey || "",
       attentionKey: parsed.attentionKey || "",
+      pendoKey: parsed.pendoKey || "",
       atlassianDomain: parsed.atlassianDomain || "",
       atlassianEmail: parsed.atlassianEmail || "",
       atlassianToken: parsed.atlassianToken || "",
@@ -76,6 +80,7 @@ export function buildKeyHeaders(keys: ApiKeyState): Record<string, string> {
   if (keys.geminiKey) headers["x-gemini-key"] = keys.geminiKey;
   if (keys.productboardKey) headers["x-productboard-key"] = keys.productboardKey;
   if (keys.attentionKey) headers["x-attention-key"] = keys.attentionKey;
+  if (keys.pendoKey) headers["x-pendo-integration-key"] = keys.pendoKey;
   if (keys.atlassianDomain) headers["x-atlassian-domain"] = keys.atlassianDomain;
   if (keys.atlassianEmail) headers["x-atlassian-email"] = keys.atlassianEmail;
   if (keys.atlassianToken) headers["x-atlassian-token"] = keys.atlassianToken;

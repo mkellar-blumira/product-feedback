@@ -84,6 +84,7 @@ export function SourcePanel({
   const [confluencePages, setConfluencePages] = useState<ConfluencePage[]>([]);
   const [dataSources, setDataSources] = useState<DataSourceStatus[]>([]);
   const [dataIsDemo, setDataIsDemo] = useState(true);
+  const [pendoItemCount, setPendoItemCount] = useState(0);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -95,8 +96,9 @@ export function SourcePanel({
         fetch("/api/sources/productboard", { headers }).then((r) => r.json()),
         fetch("/api/sources/attention", { headers }).then((r) => r.json()),
         fetch("/api/sources/atlassian", { headers }).then((r) => r.json()).catch(() => ({ connected: false, jiraIssues: [], confluencePages: [] })),
+        fetch("/api/sources/pendo", { headers }).then((r) => r.json()).catch(() => ({ connected: false, overview: null })),
       ];
-      const [pbRes, attRes, atlRes] = await Promise.all(fetches);
+      const [pbRes, attRes, atlRes, pendoRes] = await Promise.all(fetches);
 
       const newFeatures: ProductboardFeature[] = pbRes.features || [];
       const newFeedback: FeedbackItem[] = pbRes.notes || [];
@@ -105,6 +107,7 @@ export function SourcePanel({
       const newConfluence: ConfluencePage[] = atlRes.confluencePages || [];
       const atlConnected = atlRes.connected === true;
       const isDemo = pbRes.featuresIsDemo || attRes.callsIsDemo;
+      const newPendoCount = (pendoRes.overview?.totalPages || 0) + (pendoRes.overview?.totalFeatures || 0);
 
       if (useDemoData && isDemo && !atlConnected) {
         setFeedback(DEMO_FEEDBACK);
@@ -117,6 +120,7 @@ export function SourcePanel({
       }
       setJiraIssues(newJira);
       setConfluencePages(newConfluence);
+      setPendoItemCount(newPendoCount);
       setDataIsDemo(isDemo && useDemoData && !atlConnected);
 
       const sources: DataSourceStatus[] = [];
@@ -125,6 +129,16 @@ export function SourcePanel({
       }
       if (status.attentionKey.configured) {
         sources.push({ name: "Attention", source: "attention", connected: attRes.connected, lastSync: attRes.connected ? "just now" : undefined, itemCount: newCalls.length, icon: "phone" });
+      }
+      if (status.pendoKey?.configured || pendoRes.connected) {
+        sources.push({
+          name: "Pendo",
+          source: "pendo",
+          connected: pendoRes.connected,
+          lastSync: pendoRes.connected ? "just now" : undefined,
+          itemCount: newPendoCount,
+          icon: "hash",
+        });
       }
       if (status.atlassianKey?.configured || atlConnected) {
         const jiraStatus = atlRes.jiraError ? `Error: ${String(atlRes.jiraError).slice(0, 100)}` : atlConnected ? "just now" : undefined;
@@ -147,6 +161,7 @@ export function SourcePanel({
         setCalls(DEMO_ATTENTION_CALLS);
         setDataSources(DEMO_DATA_SOURCES);
         setDataIsDemo(true);
+        setPendoItemCount(0);
       }
     } finally {
       setLoading(false);
@@ -217,7 +232,7 @@ export function SourcePanel({
     );
   }, [confluencePages, sq]);
 
-  const totalItems = feedback.length + features.length + calls.length + jiraIssues.length + confluencePages.length;
+  const totalItems = feedback.length + features.length + calls.length + jiraIssues.length + confluencePages.length + pendoItemCount;
 
   function formatDate(dateStr: string | undefined): string {
     if (!dateStr) return "";
@@ -410,7 +425,8 @@ export function SourcePanel({
                 <p className="text-[10px] text-muted-foreground font-medium">
                   {status.geminiKey.configured ||
                   status.productboardKey.configured ||
-                  status.attentionKey.configured
+                  status.attentionKey.configured ||
+                  status.pendoKey?.configured
                     ? "Manage API keys"
                     : "Add API keys to connect live data"}
                 </p>
@@ -420,6 +436,7 @@ export function SourcePanel({
                   { label: "Gemini", configured: status.geminiKey.configured },
                   { label: "Productboard", configured: status.productboardKey.configured },
                   { label: "Attention", configured: status.attentionKey.configured },
+                  { label: "Pendo", configured: status.pendoKey?.configured },
                   { label: "Atlassian", configured: status.atlassianKey?.configured },
                 ].map((s) => (
                   <span

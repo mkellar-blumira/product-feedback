@@ -45,6 +45,32 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    if (keyName === "pendoKey") {
+      const key = req.headers.get("x-pendo-integration-key") || process.env.PENDO_INTEGRATION_KEY;
+      if (!key) return NextResponse.json({ valid: false, error: "No key provided" });
+      try {
+        const res = await fetch("https://app.pendo.io/api/v1/token/verify", {
+          headers: {
+            "x-pendo-integration-key": key,
+            "Content-Type": "application/json",
+          },
+        });
+        if (res.ok) {
+          const details = await res.json().catch(() => null);
+          return NextResponse.json({
+            valid: true,
+            writeAccess: !!details?.writeAccess,
+          });
+        }
+        if (res.status === 403) {
+          return NextResponse.json({ valid: false, error: "Pendo rejected the integration key" });
+        }
+        return NextResponse.json({ valid: false, error: `API returned ${res.status}: ${res.statusText}` });
+      } catch (err: unknown) {
+        return NextResponse.json({ valid: false, error: err instanceof Error ? err.message : "Connection failed" });
+      }
+    }
+
     if (keyName === "atlassianToken") {
       const domain = req.headers.get("x-atlassian-domain") || process.env.ATLASSIAN_DOMAIN;
       const email = req.headers.get("x-atlassian-email") || process.env.ATLASSIAN_EMAIL;
