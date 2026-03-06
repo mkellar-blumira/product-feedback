@@ -6,15 +6,17 @@ import {
   DataSourceStatus,
 } from "./types";
 
+// Synthetic demo data only. These names, companies, timelines, and business details
+// are intentionally fictionalized for safe public sharing and product demos.
 export const DEMO_FEEDBACK: FeedbackItem[] = [
   {
     id: "fb-001",
     source: "zendesk",
     title: "Dashboard loading times are unacceptable",
     content:
-      "We've been experiencing dashboard load times of 15-20 seconds since the last update. This is severely impacting our team's workflow. Multiple users on our account have reported the same issue. We're on the Enterprise plan and this is a blocker for our quarterly review process.",
-    customer: "Sarah Chen",
-    company: "Acme Corp",
+      "This synthetic demo account is seeing dashboard load times of 15-20 seconds after a recent update. Multiple users reported the same slowdown, and it is disrupting a quarterly review workflow in the sample environment.",
+    customer: "Avery Example",
+    company: "ExampleCorp",
     sentiment: "negative",
     themes: ["performance", "dashboard", "enterprise"],
     date: "2026-02-28",
@@ -26,9 +28,9 @@ export const DEMO_FEEDBACK: FeedbackItem[] = [
     source: "intercom",
     title: "Love the new reporting feature",
     content:
-      "The new custom reporting builder is fantastic! We've already created 12 reports that replaced our manual Excel process. The drag-and-drop interface is intuitive. Would love to see scheduled email delivery of reports added next.",
-    customer: "Marcus Johnson",
-    company: "TechFlow Inc",
+      "The new custom reporting builder is fantastic for this demo workspace. We already created a dozen reports that replaced manual spreadsheet work. The drag-and-drop interface feels intuitive, and scheduled email delivery would make it even better.",
+    customer: "Jordan Sample",
+    company: "Northwind Demo",
     sentiment: "positive",
     themes: ["reporting", "ux", "feature-request"],
     date: "2026-02-27",
@@ -40,23 +42,23 @@ export const DEMO_FEEDBACK: FeedbackItem[] = [
     source: "slack",
     title: "SSO integration keeps breaking",
     content:
-      "Third time this month our SSO integration has dropped. Users are getting locked out and it takes 2-3 hours for our IT team to reconnect. This is a security and productivity concern. We need a permanent fix or we'll need to evaluate alternatives.",
-    customer: "David Park",
-    company: "GlobalFinance",
+      "In this synthetic scenario, the SSO integration dropped for the third time this month. Users are getting locked out and the reconnect process takes hours for the IT team. This is framed as a security and productivity concern in the demo dataset.",
+    customer: "Casey Demo",
+    company: "SampleBank",
     sentiment: "negative",
     themes: ["sso", "authentication", "reliability", "churn-risk"],
     date: "2026-02-26",
     priority: "critical",
-    metadata: { plan: "Enterprise", arr: "$120k" },
+    metadata: { plan: "Enterprise", accountTier: "Strategic" },
   },
   {
     id: "fb-004",
     source: "productboard",
     title: "API rate limits too restrictive",
     content:
-      "We're building a deep integration with your platform but the current rate limits (100 req/min) are insufficient for our sync process. We need at least 500 req/min to keep our systems in real-time sync. Happy to discuss our use case in detail.",
-    customer: "Lisa Wang",
-    company: "DataSync Solutions",
+      "We're building a deep integration in this demo scenario, but the current rate limits are too low for the sync process. We need much higher throughput to keep systems aligned in near real time.",
+    customer: "Morgan Example",
+    company: "DemoSync Labs",
     sentiment: "mixed",
     themes: ["api", "integration", "developer-experience"],
     date: "2026-02-25",
@@ -68,9 +70,9 @@ export const DEMO_FEEDBACK: FeedbackItem[] = [
     source: "attention",
     title: "Need better onboarding for new team members",
     content:
-      "During our QBR call, the customer expressed frustration with onboarding. They've hired 30 new people this quarter and each one takes a full week to get productive on the platform. They're requesting interactive tutorials, role-based onboarding paths, and a sandbox environment.",
-    customer: "James Mitchell",
-    company: "ScaleUp Industries",
+      "During this sample QBR call, the customer expressed frustration with onboarding. Their team has grown quickly and each new user takes roughly a week to become productive. They requested interactive tutorials, role-based onboarding paths, and a sandbox environment.",
+    customer: "Taylor Placeholder",
+    company: "DemoScale Co",
     sentiment: "negative",
     themes: ["onboarding", "ux", "training", "growth"],
     date: "2026-02-24",
@@ -82,9 +84,9 @@ export const DEMO_FEEDBACK: FeedbackItem[] = [
     source: "zendesk",
     title: "Mobile app crashes on Android 14",
     content:
-      "The mobile app consistently crashes when trying to view analytics on Android 14 devices. We've tested on Samsung Galaxy S24 and Pixel 8 Pro. The crash happens within 5 seconds of opening any chart view. This affects our field sales team who rely on mobile access.",
-    customer: "Rachel Torres",
-    company: "FieldForce Co",
+      "The mobile app consistently crashes when trying to view analytics on Android 14 devices in this demo account. The crash happens within seconds of opening a chart view, affecting a field team that relies on mobile access.",
+    customer: "Jamie Example",
+    company: "Placeholder Field Ops",
     sentiment: "negative",
     themes: ["mobile", "bug", "android", "analytics"],
     date: "2026-02-23",
@@ -96,9 +98,9 @@ export const DEMO_FEEDBACK: FeedbackItem[] = [
     source: "intercom",
     title: "Would pay more for advanced permissions",
     content:
-      "We love the product but need granular role-based access control. Right now it's admin or viewer — we need custom roles with field-level permissions. We'd upgrade to Enterprise for this. Several other companies in our network have the same request.",
-    customer: "Alex Petrov",
-    company: "MidMarket Solutions",
+      "We love the product in this synthetic example but need granular role-based access control. Right now it's admin or viewer; we need custom roles with field-level permissions. This is positioned as a likely upgrade trigger in the demo dataset.",
+    customer: "Riley Sample",
+    company: "DemoMarket Solutions",
     sentiment: "mixed",
     themes: ["permissions", "rbac", "upsell", "enterprise"],
     date: "2026-02-22",
@@ -110,70 +112,70 @@ export const DEMO_FEEDBACK: FeedbackItem[] = [
     source: "slack",
     title: "Competitor just launched AI summaries",
     content:
-      "Internal note from sales: Lost a deal to CompetitorX today. The prospect said their AI-powered feedback summaries and auto-categorization were the deciding factor. We're hearing this more frequently in competitive deals. Three losses this month citing AI capabilities.",
-    customer: "Internal — Sales Team",
-    company: "Internal",
+      "Synthetic internal note: lost a sample deal to Competitor Alpha. The prospect said AI-powered feedback summaries and auto-categorization were the deciding factor. This demo record is meant to simulate repeated competitive pressure around AI capabilities.",
+    customer: "Internal — Demo GTM Team",
+    company: "Internal (Synthetic)",
     sentiment: "negative",
     themes: ["competitive", "ai", "product-gap", "churn-risk"],
     date: "2026-02-21",
     priority: "critical",
-    metadata: { source: "internal", dealsLost: "3" },
+    metadata: { source: "internal-demo", dealsLost: "multiple" },
   },
   {
     id: "fb-009",
     source: "productboard",
     title: "Bulk data export needed for compliance",
     content:
-      "As part of our SOC 2 audit, we need to export all customer interaction data in a structured format. The current export is limited to CSV with 10k rows. We need full JSON/Parquet export with no row limits. This is a compliance blocker for Q2 renewal.",
-    customer: "Nina Kowalski",
-    company: "SecureBank",
+      "As part of a sample compliance review, we need to export all customer interaction data in a structured format. The current export is limited and the demo scenario asks for full JSON or Parquet export with no row limits.",
+    customer: "Sam Example",
+    company: "SampleBank",
     sentiment: "negative",
     themes: ["compliance", "export", "data", "enterprise", "churn-risk"],
     date: "2026-02-20",
     priority: "high",
-    metadata: { plan: "Enterprise", renewalDate: "2026-06-01" },
+    metadata: { plan: "Enterprise", renewalWindow: "Upcoming" },
   },
   {
     id: "fb-010",
     source: "attention",
     title: "Expansion opportunity — 500 additional seats",
     content:
-      "During renewal call, VP of Ops mentioned they want to roll out to all departments. Currently at 50 seats, potential for 500+. Key blocker is the SSO reliability issue and needing an admin console for department-level management. If fixed by Q2, they'll commit to full rollout.",
-    customer: "Tom Bradley",
-    company: "GlobalFinance",
+      "During a synthetic renewal call, the VP of Ops mentioned they want to roll out to all departments. The key blockers are SSO reliability and needing an admin console for department-level management. If fixed soon, they would commit to a broader rollout.",
+    customer: "Parker Demo",
+    company: "SampleBank",
     sentiment: "positive",
     themes: ["expansion", "sso", "admin", "upsell"],
     date: "2026-02-19",
     priority: "high",
-    metadata: { currentSeats: "50", potentialSeats: "500", arr: "$120k" },
+    metadata: { currentSeats: "Pilot", potentialSeats: "Multi-team", accountTier: "Strategic" },
   },
   {
     id: "fb-011",
     source: "zendesk",
     title: "Webhook delivery is unreliable",
     content:
-      "We've set up webhooks for real-time sync but about 15% of events are never delivered. No retry mechanism visible. This breaks our downstream automation pipeline. Need reliable webhook delivery with retry logic and a dead letter queue.",
-    customer: "Kevin Huang",
-    company: "AutomateAll",
+      "We've set up webhooks for real-time sync in this demo scenario, but a noticeable share of events are never delivered. No retry mechanism is visible, which breaks downstream automation. The request is for reliable delivery, retries, and a dead letter queue.",
+    customer: "Cameron Sample",
+    company: "Demo Automations",
     sentiment: "negative",
     themes: ["webhooks", "reliability", "api", "integration"],
     date: "2026-02-18",
     priority: "high",
-    metadata: { ticketId: "ZD-4467", failureRate: "15%" },
+    metadata: { ticketId: "ZD-4467", failureRate: "noticeable" },
   },
   {
     id: "fb-012",
     source: "manual",
     title: "Executive feedback from board meeting",
     content:
-      "Board feedback: Customers love the core product but churn is ticking up among mid-market accounts. Top cited reasons: (1) lack of AI/automation features, (2) onboarding friction, (3) missing enterprise-grade permissions. Board wants a 90-day action plan.",
-    customer: "Internal — Executive Team",
-    company: "Internal",
+      "Synthetic executive feedback: Customers love the core product but churn is ticking up among mid-market accounts. Top cited reasons in this demo narrative are lack of AI and automation features, onboarding friction, and missing enterprise-grade permissions.",
+    customer: "Internal — Demo Leadership",
+    company: "Internal (Synthetic)",
     sentiment: "mixed",
     themes: ["churn", "ai", "onboarding", "permissions", "strategy"],
     date: "2026-02-17",
     priority: "critical",
-    metadata: { source: "board-meeting" },
+    metadata: { source: "synthetic-board-meeting" },
   },
 ];
 
@@ -263,48 +265,48 @@ export const DEMO_PRODUCTBOARD_FEATURES: ProductboardFeature[] = [
 export const DEMO_ATTENTION_CALLS: AttentionCall[] = [
   {
     id: "ac-001",
-    title: "QBR — ScaleUp Industries",
+    title: "QBR — DemoScale Co",
     date: "2026-02-24",
     duration: "45 min",
-    participants: ["James Mitchell (ScaleUp)", "Our CSM: Andrea Lopez"],
+    participants: ["Taylor Placeholder (DemoScale)", "Our CSM: Avery Support"],
     summary:
-      "Customer expressed strong frustration with onboarding experience for new hires. They've grown 60% this quarter and each new user takes a full week to become productive. Requested interactive tutorials and sandbox environment. Overall satisfied with core product but this is becoming a renewal risk if not addressed.",
+      "This synthetic customer expressed strong frustration with onboarding for new hires. Their team has grown quickly and each new user takes about a week to become productive. They requested interactive tutorials and a sandbox environment. The sample call frames this as a renewal risk if not addressed.",
     keyMoments: [
       {
         timestamp: "05:30",
-        text: "We love the product but onboarding 30 people was a nightmare",
+        text: "We love the product but onboarding a wave of new hires was a nightmare",
         sentiment: "negative",
       },
       {
         timestamp: "12:15",
-        text: "If you had guided tours like Pendo does, that would cut our ramp time in half",
+        text: "If you had guided tours, that would cut our ramp time in half",
         sentiment: "mixed",
       },
       {
         timestamp: "28:00",
-        text: "We're committed to renewing but need to see onboarding improvements by Q3",
+        text: "We're committed to renewing but need to see onboarding improvements soon",
         sentiment: "positive",
       },
     ],
     actionItems: [
-      "Share onboarding roadmap with customer by March 15",
-      "Set up sandbox environment pilot for ScaleUp",
+      "Share onboarding roadmap with customer next sprint",
+      "Set up sandbox environment pilot for DemoScale",
       "Schedule follow-up in 30 days",
     ],
     themes: ["onboarding", "ux", "training", "growth", "renewal"],
   },
   {
     id: "ac-002",
-    title: "Renewal Call — GlobalFinance",
+    title: "Renewal Call — SampleBank",
     date: "2026-02-19",
     duration: "35 min",
-    participants: ["Tom Bradley (GlobalFinance)", "Our AE: Chris Nguyen"],
+    participants: ["Parker Demo (SampleBank)", "Our AE: Jordan Seller"],
     summary:
-      "Very positive renewal conversation. Customer wants to expand from 50 to 500 seats across all departments. Key blockers: SSO reliability needs to be fixed, and they need department-level admin console. VP mentioned $600k budget approved if we can deliver by Q2.",
+      "Very positive synthetic renewal conversation. The customer wants to expand from a pilot to a broader multi-team rollout. Key blockers are SSO reliability and a department-level admin console. The sample account indicates budget is available if those issues are addressed soon.",
     keyMoments: [
       {
         timestamp: "03:00",
-        text: "Our CEO is bought in — we want this company-wide",
+        text: "Leadership is bought in — we want this company-wide",
         sentiment: "positive",
       },
       {
@@ -314,14 +316,14 @@ export const DEMO_ATTENTION_CALLS: AttentionCall[] = [
       },
       {
         timestamp: "22:30",
-        text: "We have budget approved for 500 seats if you fix the SSO and give us admin tools",
+        text: "We have expansion budget approved if you fix the SSO and give us admin tools",
         sentiment: "positive",
       },
     ],
     actionItems: [
       "Escalate SSO fix to P0 priority",
       "Share admin console mockups within 2 weeks",
-      "Draft expansion proposal for 500 seats",
+      "Draft expansion proposal for broader rollout",
       "Weekly check-in calls until SSO resolved",
     ],
     themes: ["expansion", "sso", "admin", "upsell", "enterprise"],
@@ -333,7 +335,7 @@ export const DEMO_ATTENTION_CALLS: AttentionCall[] = [
     duration: "20 min",
     participants: ["Internal: Sales AE Jordan Blake", "Sales Manager Pat Kim"],
     summary:
-      "Lost $85k deal to CompetitorX. Prospect cited AI-powered feedback analysis and auto-categorization as primary differentiators. This is the third loss this month where AI capabilities were the deciding factor. Competitor is marketing heavily around 'AI-first feedback intelligence.'",
+      "Lost a synthetic mid-market deal to Competitor Alpha. The prospect cited AI-powered feedback analysis and auto-categorization as the primary differentiators. This sample call is meant to model repeated losses where AI capabilities are the deciding factor.",
     keyMoments: [
       {
         timestamp: "02:00",
@@ -342,7 +344,7 @@ export const DEMO_ATTENTION_CALLS: AttentionCall[] = [
       },
       {
         timestamp: "08:30",
-        text: "The prospect said our product was better in every other way, but AI was the tiebreaker",
+        text: "The prospect said our product was stronger in other areas, but AI was the tiebreaker",
         sentiment: "mixed",
       },
       {
@@ -360,12 +362,12 @@ export const DEMO_ATTENTION_CALLS: AttentionCall[] = [
   },
   {
     id: "ac-004",
-    title: "Support Escalation — Acme Corp",
+    title: "Support Escalation — ExampleCorp",
     date: "2026-02-28",
     duration: "25 min",
-    participants: ["Sarah Chen (Acme Corp)", "Support Lead: Mike Torres"],
+    participants: ["Avery Example (ExampleCorp)", "Support Lead: Morgan Support"],
     summary:
-      "Critical escalation about dashboard performance. Customer's team of 45 users is experiencing 15-20 second load times, making the product unusable for their quarterly review process. They've identified the issue started after the v3.2 release. Deadline: must be resolved before March board meeting.",
+      "Critical synthetic escalation about dashboard performance. The customer's team is experiencing 15-20 second load times, making the product unusable for a review workflow. The sample issue is framed as starting after a recent release and needing urgent resolution.",
     keyMoments: [
       {
         timestamp: "01:30",
@@ -374,7 +376,7 @@ export const DEMO_ATTENTION_CALLS: AttentionCall[] = [
       },
       {
         timestamp: "10:00",
-        text: "We have a board presentation March 10th and we need this fixed by then",
+        text: "We have an important review coming up and we need this fixed before then",
         sentiment: "negative",
       },
       {
@@ -384,8 +386,8 @@ export const DEMO_ATTENTION_CALLS: AttentionCall[] = [
       },
     ],
     actionItems: [
-      "Engineering hotfix for dashboard performance by March 5",
-      "Daily status updates to Acme Corp",
+      "Engineering hotfix for dashboard performance this sprint",
+      "Daily status updates to ExampleCorp",
       "Post-mortem after fix deployed",
     ],
     themes: ["performance", "dashboard", "enterprise", "escalation"],
@@ -396,9 +398,9 @@ export const DEMO_INSIGHTS: Insight[] = [
   {
     id: "ins-001",
     type: "risk",
-    title: "SSO Reliability Threatens $720k in Revenue",
+    title: "SSO Reliability Threatens Strategic Expansion",
     description:
-      "SSO reliability issues are mentioned by 3 enterprise accounts representing $720k in combined ARR. GlobalFinance has a $600k expansion contingent on SSO fixes. SecureBank renewal at risk. Immediate engineering attention required.",
+      "SSO reliability issues are mentioned by several enterprise accounts in the synthetic demo dataset. One strategic account has a broader rollout contingent on SSO fixes, and another renewal scenario is framed as at risk. Immediate engineering attention is still the takeaway.",
     confidence: 0.95,
     relatedFeedbackIds: ["fb-003", "fb-010"],
     themes: ["sso", "reliability", "enterprise", "churn-risk"],
@@ -408,9 +410,9 @@ export const DEMO_INSIGHTS: Insight[] = [
   {
     id: "ins-002",
     type: "trend",
-    title: "AI Feature Gap Causing Competitive Losses",
+    title: "AI Feature Gap Driving Competitive Pressure",
     description:
-      "3 deals lost this month citing competitor AI capabilities. Internal sales team and board both flagging this as critical. CompetitorX's AI-first positioning is resonating with prospects. AI summarization is the #1 voted feature on Productboard with 847 votes.",
+      "Multiple synthetic deals are marked as lost due to competitor AI capabilities. The demo internal notes and leadership feedback both flag this as critical. AI summarization remains the top-voted feature in the sample roadmap data.",
     confidence: 0.92,
     relatedFeedbackIds: ["fb-008", "fb-012"],
     themes: ["ai", "competitive", "product-gap"],
@@ -432,9 +434,9 @@ export const DEMO_INSIGHTS: Insight[] = [
   {
     id: "ins-004",
     type: "recommendation",
-    title: "Prioritize: Performance Hotfix → SSO → AI Features",
+    title: "Prioritize: Performance → SSO → AI Features",
     description:
-      "Based on urgency and revenue impact analysis: (1) Dashboard performance hotfix needed before March 10 for Acme Corp board meeting, (2) SSO reliability fix unlocks $600k GlobalFinance expansion, (3) AI features address competitive positioning and long-term churn reduction.",
+      "Based on urgency and impact analysis in the synthetic demo data: (1) dashboard performance needs immediate attention, (2) SSO reliability unlocks a strategic expansion scenario, and (3) AI features address competitive positioning and longer-term churn reduction.",
     confidence: 0.85,
     relatedFeedbackIds: ["fb-001", "fb-003", "fb-008", "fb-010"],
     themes: ["performance", "sso", "ai", "strategy"],

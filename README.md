@@ -2,6 +2,8 @@
 
 An AI-powered feedback intelligence platform that aggregates customer feedback from Productboard, Attention, Zendesk, Intercom, and Slack — then lets you query it through a conversational agent with built-in RAG (Retrieval-Augmented Generation).
 
+> Demo data in this repository is synthetic and intentionally fictionalized for safe demos and public code sharing.
+
 ## Architecture
 
 ```
@@ -33,7 +35,7 @@ An AI-powered feedback intelligence platform that aggregates customer feedback f
 - **Gemini Integration**: Connect your Gemini API key for deep, nuanced AI analysis; falls back to rich built-in intelligence
 - **Productboard Integration**: Pull features and notes directly from the Productboard API
 - **Attention Integration**: Pull call recordings, summaries, and action items from Attention
-- **Rich Demo Data**: 12 feedback items, 8 Productboard features, 4 Attention calls, 6 pre-computed insights — all ready to explore without any API keys
+- **Rich Demo Data**: 12 synthetic feedback items, 8 Productboard features, 4 Attention calls, 6 pre-computed insights — all ready to explore without any API keys
 - **Cross-Source Intelligence**: Links feedback to features to calls — surfaces revenue impact, churn risk, and competitive signals
 - **v0-Ready**: Built with Next.js 14 + Tailwind + shadcn-style components, designed to run in Vercel's v0
 
@@ -59,6 +61,12 @@ cp .env.example .env.local
 | `GEMINI_API_KEY` | Optional | Enables Gemini-powered AI responses (falls back to built-in intelligence) |
 | `PRODUCTBOARD_API_TOKEN` | Optional | Pulls live features/notes from Productboard (falls back to demo data) |
 | `ATTENTION_API_KEY` | Optional | Pulls live call data from Attention (falls back to demo data) |
+| `PENDO_INTEGRATION_KEY` | Optional | Pulls Pendo usage insights and on-demand visitor/account history |
+| `ATLASSIAN_DOMAIN` | Optional | Enables Jira + Confluence when used with the Atlassian credentials below |
+| `ATLASSIAN_EMAIL` | Optional | Atlassian account email for Jira/Confluence access |
+| `ATLASSIAN_API_TOKEN` | Optional | Atlassian API token for Jira/Confluence access |
+| `APP_BASIC_AUTH_USERNAME` | Optional | Username for lightweight HTTP Basic Auth, if enabled |
+| `APP_BASIC_AUTH_PASSWORD` | Optional | If set, requires HTTP Basic Auth for the app and all API routes |
 
 ## Deploying to v0 / Vercel
 
@@ -68,6 +76,14 @@ This project is structured as a standard Next.js 14 app and can be deployed dire
 2. Import into Vercel (or paste components into v0)
 3. Add environment variables in the Vercel dashboard
 4. Deploy
+
+### Public deployment safety
+
+If you deploy this app anywhere public and connect real data sources:
+
+- set `APP_BASIC_AUTH_PASSWORD` to require lightweight HTTP Basic Auth
+- avoid exposing live provider credentials in an unauthenticated environment
+- remember that the app is designed to surface customer feedback, tickets, docs, and usage context once connected
 
 ## Try These Queries
 
